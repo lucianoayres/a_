@@ -9,6 +9,7 @@ provided as command line arguments.
 import sys
 import time
 import argparse
+import math
 from pynput.mouse import Controller
 import subprocess
 import re
@@ -84,7 +85,54 @@ def get_screen_resolution():
     return (1920, 1080)
 
 
-def move_mouse(x, y, delay=0, check_bounds=True):
+def smooth_move(start_x, start_y, end_x, end_y, duration=1.0, steps=100):
+    """
+    Move the mouse smoothly from start position to end position.
+
+    Args:
+        start_x (int): Starting X coordinate
+        start_y (int): Starting Y coordinate
+        end_x (int): Ending X coordinate
+        end_y (int): Ending Y coordinate
+        duration (float): Total duration of the movement in seconds
+        steps (int): Number of intermediate steps
+    """
+    mouse = Controller()
+
+    # Calculate the distance to move
+    dx = end_x - start_x
+    dy = end_y - start_y
+
+    # Calculate the time to sleep between steps
+    sleep_time = duration / steps
+
+    print(
+        f"Moving mouse smoothly from ({start_x}, {start_y}) to ({end_x}, {end_y}) over {duration} seconds")
+
+    # Use easing function for smoother acceleration/deceleration
+    for step in range(steps + 1):
+        # Use sine easing for smooth acceleration and deceleration
+        t = step / steps
+        # Ease in-out sine function
+        ease = 0.5 - 0.5 * math.cos(math.pi * t)
+
+        # Calculate intermediate position
+        ix = start_x + dx * ease
+        iy = start_y + dy * ease
+
+        # Move to intermediate position
+        mouse.position = (ix, iy)
+
+        # Sleep for a short time
+        time.sleep(sleep_time)
+
+    # Ensure we end up exactly at the target position
+    mouse.position = (end_x, end_y)
+    print(
+        f"Smooth movement complete. Current mouse position: {mouse.position}")
+
+
+def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100):
     """
     Move the mouse to the specified coordinates.
 
@@ -93,6 +141,9 @@ def move_mouse(x, y, delay=0, check_bounds=True):
         y (int): Y coordinate
         delay (float): Delay in seconds before moving the mouse
         check_bounds (bool): Whether to check if coordinates are within screen bounds
+        smooth (bool): Whether to move the mouse smoothly to the target
+        smooth_duration (float): Duration of smooth movement in seconds
+        smooth_steps (int): Number of steps for smooth movement
     """
     mouse = Controller()
 
@@ -113,9 +164,15 @@ def move_mouse(x, y, delay=0, check_bounds=True):
         print(f"Waiting for {delay} seconds before moving mouse...")
         time.sleep(delay)
 
-    print(f"Moving mouse to coordinates: ({x}, {y})")
-    mouse.position = (x, y)
-    print(f"Current mouse position: {mouse.position}")
+    if smooth:
+        # Get current mouse position as starting point
+        current_pos = mouse.position
+        smooth_move(current_pos[0], current_pos[1], x,
+                    y, smooth_duration, smooth_steps)
+    else:
+        print(f"Moving mouse to coordinates: ({x}, {y})")
+        mouse.position = (x, y)
+        print(f"Current mouse position: {mouse.position}")
 
 
 def main():
@@ -140,6 +197,14 @@ def main():
     parser.add_argument('--ignore-bounds', action='store_true',
                         help='Ignore screen boundary checks')
 
+    # Smooth movement options
+    parser.add_argument('--smooth', action='store_true',
+                        help='Move the mouse smoothly to the target coordinates')
+    parser.add_argument('--duration', type=float, default=1.0,
+                        help='Duration of smooth movement in seconds (default: 1.0)')
+    parser.add_argument('--steps', type=int, default=100,
+                        help='Number of steps for smooth movement (default: 100)')
+
     args = parser.parse_args()
 
     # Show resolution and exit if requested
@@ -154,7 +219,15 @@ def main():
             "the following arguments are required: x, y (unless --show-resolution is specified)")
 
     # Move the mouse
-    move_mouse(args.x, args.y, args.delay, not args.ignore_bounds)
+    move_mouse(
+        args.x,
+        args.y,
+        args.delay,
+        not args.ignore_bounds,
+        args.smooth,
+        args.duration,
+        args.steps
+    )
 
 
 if __name__ == "__main__":

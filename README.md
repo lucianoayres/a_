@@ -94,6 +94,29 @@ python a_.py 500 300 -d 2
 
 This will wait for 2 seconds and then move the mouse cursor to the position with X=500 and Y=300.
 
+### Smooth Movement
+
+You can enable smooth movement to make the mouse transition gradually to the target coordinates:
+
+```
+python a_.py X Y --smooth
+```
+
+This will move the mouse smoothly from its current position to the target coordinates.
+
+You can customize the smooth movement with these additional options:
+
+- `--duration SECONDS`: Set the duration of the smooth movement (default: 1.0 second)
+- `--steps NUMBER`: Set the number of steps for the smooth movement (default: 100)
+
+Example:
+
+```
+python a_.py 500 300 --smooth --duration 2.5 --steps 150
+```
+
+This will move the mouse smoothly to position (500, 300) over 2.5 seconds using 150 intermediate steps.
+
 ### Screen Resolution Awareness
 
 The script now detects your screen resolution and warns you if the coordinates are outside the screen boundaries. You can:
@@ -123,6 +146,12 @@ This will:
 2. Activate the virtual environment
 3. Run the script with your arguments
 4. Deactivate the virtual environment when done
+
+All options work with the run script as well:
+
+```
+./run.sh X Y --smooth --duration 2.0 --steps 200
+```
 
 ## Making the Script Executable (Linux/macOS)
 
