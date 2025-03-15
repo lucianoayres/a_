@@ -53,26 +53,298 @@ A simple Python utility to move the mouse cursor to specified coordinates and pe
 
 ## Usage
 
-### Basic Usage
+### New Command-Line Interface
+
+The utility supports a semantic command-line interface that allows you to specify actions in sequence with their own parameters.
+
+#### Basic Usage with --move
 
 Move the mouse to specified coordinates:
 
 ```
-python a_.py X Y
-```
-
-Where:
-
-- `X` is the X coordinate (horizontal position)
-- `Y` is the Y coordinate (vertical position)
-
-Example:
-
-```
-python a_.py 500 300
+python a_.py --move 500 300
 ```
 
 This will move the mouse cursor to the position with X=500 and Y=300.
+
+#### Sequential Actions
+
+You can combine multiple actions in a single command:
+
+```
+python a_.py --move 500 300 --click --type "Hello, world!" --key enter
+```
+
+This will:
+
+1. Move the mouse to (500, 300)
+2. Perform a left click
+3. Type "Hello, world!"
+4. Press the Enter key
+
+#### Global Parameters
+
+You can set global parameters that apply to all actions:
+
+```
+python a_.py --global-smooth --global-delay 0.5 --move 500 300 --move 600 400 --move 700 500
+```
+
+This will:
+
+1. Move the mouse smoothly to (500, 300)
+2. Wait 0.5 seconds
+3. Move the mouse smoothly to (600, 400)
+4. Wait 0.5 seconds
+5. Move the mouse smoothly to (700, 500)
+
+Available global parameters:
+
+- `--global-delay SECONDS`: Default delay between all actions (default: 0)
+- `--global-smooth`: Enable smooth movement for all move/drag actions
+- `--global-duration SECONDS`: Default duration for all smooth movements (default: 1.0)
+- `--global-steps COUNT`: Default steps for all smooth movements (default: 100)
+- `--global-button [left|right]`: Default button for all click/drag actions (default: left)
+- `--global-interval SECONDS`: Default interval for all multi-actions (clicks, key presses) (default: 0.1)
+
+#### Action-Specific Parameters
+
+Each action can have its own specific parameters that override global settings:
+
+```
+python a_.py --global-smooth --move 500 300 --move 600 400 --smooth --duration 2.0 --move 700 500
+```
+
+In this example, all movements are smooth, but the second movement has a custom duration of 2.0 seconds.
+
+### Mouse Movement Examples
+
+#### Basic Movement
+
+```
+# Move to coordinates
+python a_.py --move 500 300
+
+# Move smoothly
+python a_.py --move 500 300 --smooth
+
+# Move with custom smooth movement parameters
+python a_.py --move 500 300 --smooth --duration 2.0 --steps 150
+
+# Move with delay before movement
+python a_.py --move 500 300 --delay 1.5
+
+# Move and ignore screen boundary checks
+python a_.py --move 2000 1500 --ignore-bounds
+```
+
+#### Multiple Movements
+
+```
+# Multiple movements in sequence
+python a_.py --move 500 300 --move 600 400 --move 700 500
+
+# Multiple smooth movements with global settings
+python a_.py --global-smooth --global-duration 0.5 --move 500 300 --move 600 400 --move 700 500
+
+# Multiple movements with waits in between
+python a_.py --move 500 300 --wait 1 --move 600 400 --wait 1 --move 700 500
+```
+
+### Mouse Click Examples
+
+#### Basic Clicks
+
+```
+# Move and left click
+python a_.py --move 500 300 --click
+
+# Move and right click
+python a_.py --move 500 300 --right-click
+
+# Move and double click
+python a_.py --move 500 300 --double-click
+
+# Click without moving (at current position)
+python a_.py --click
+```
+
+#### Advanced Click Options
+
+```
+# Multiple clicks
+python a_.py --move 500 300 --click --click-count 3
+
+# Multiple clicks with custom interval
+python a_.py --move 500 300 --click --click-count 3 --click-interval 0.2
+
+# Click with delay after
+python a_.py --move 500 300 --click --click-delay 1.5
+```
+
+### Drag Operation Examples
+
+#### Basic Drag Operations
+
+```
+# Move to a position and drag to another position
+python a_.py --move 100 100 --drag 300 300
+
+# Drag directly from one position to another
+python a_.py --drag-from 100 100 300 300
+
+# Drag without smooth movement
+python a_.py --move 100 100 --drag 300 300 --no-drag-smooth
+```
+
+#### Advanced Drag Operations
+
+```
+# Click before dragging
+python a_.py --move 100 100 --drag 300 300 --click-before-drag
+
+# Click after dragging
+python a_.py --move 100 100 --drag 300 300 --click-after-drag
+
+# Click before and after dragging
+python a_.py --move 100 100 --drag 300 300 --click-before-drag --click-after-drag
+
+# Drag with custom smooth movement parameters
+python a_.py --move 100 100 --drag 300 300 --duration 2.0 --steps 150
+```
+
+### Keyboard Examples
+
+#### Basic Key Presses
+
+```
+# Press a key
+python a_.py --key a
+
+# Press a special key
+python a_.py --key enter
+
+# Press a key with modifier
+python a_.py --key c --modifiers ctrl
+
+# Press a key with multiple modifiers
+python a_.py --key s --modifiers ctrl shift
+```
+
+#### Advanced Key Press Options
+
+```
+# Multiple key presses
+python a_.py --key space --key-count 5
+
+# Multiple key presses with custom interval
+python a_.py --key space --key-count 5 --key-interval 0.2
+
+# Key press with delay after
+python a_.py --key tab --key-delay 1.5
+
+# Key press after mouse movement
+python a_.py --move 500 300 --key enter
+```
+
+### Text Typing Examples
+
+```
+# Type text
+python a_.py --type "Hello, world!"
+
+# Type text with custom interval
+python a_.py --type "Hello, world!" --type-interval 0.1
+
+# Type text with delay after
+python a_.py --type "Hello, world!" --type-delay 1.5
+
+# Move, click, and type
+python a_.py --move 500 300 --click --type "Hello, world!"
+```
+
+### Wait Examples
+
+```
+# Wait between actions
+python a_.py --move 500 300 --wait 2 --click
+
+# Multiple waits
+python a_.py --move 500 300 --wait 1 --click --wait 2 --key enter
+```
+
+### Scroll Examples
+
+You can scroll up or down at the current mouse position:
+
+```
+# Scroll up by 10 units
+python a_.py --scroll 10
+
+# Scroll down by 5 units
+python a_.py --scroll -5
+
+# Scroll with custom parameters
+python a_.py --scroll 20 --scroll-steps 20 --scroll-interval 0.02
+
+# Move to a position and then scroll
+python a_.py --move 500 300 --scroll 10
+
+# Move, click, and then scroll
+python a_.py --move 500 300 --click --scroll 10
+```
+
+#### Scroll Options
+
+Customize the scroll behavior with these options:
+
+- `--scroll AMOUNT`: Amount to scroll (positive for up, negative for down)
+- `--scroll-steps COUNT`: Number of steps to divide the scroll into (default: 10)
+- `--scroll-interval SECONDS`: Time between scroll steps in seconds (default: 0.01)
+- `--scroll-delay SECONDS`: Delay in seconds after scrolling (default: 0)
+
+### Complex Sequence Examples
+
+#### Form Filling Example
+
+```
+# Fill out a form
+python a_.py --move 500 300 --click --type "John Doe" --key tab --type "john.doe@example.com" --key tab --type "password123" --key tab --key space
+```
+
+#### Drawing Example
+
+```
+# Draw a square
+python a_.py --move 100 100 --drag 300 100 --drag 300 300 --drag 100 300 --drag 100 100
+```
+
+#### Text Editing Example
+
+```
+# Select all text and replace it
+python a_.py --move 500 300 --click --key a --modifiers ctrl --type "New text" --key s --modifiers ctrl
+```
+
+#### Web Browsing Example
+
+```
+# Navigate to a website and search
+python a_.py --move 500 50 --click --type "https://www.google.com" --key enter --wait 2 --move 500 300 --click --type "python automation" --key enter
+```
+
+### Using the Run Script with New Interface
+
+```
+# Basic movement
+./run.sh --move 500 300
+
+# Complex sequence
+./run.sh --move 500 300 --click --type "Hello, world!" --key enter
+
+# Global parameters
+./run.sh --global-smooth --move 500 300 --move 600 400 --move 700 500
+```
 
 ### Mouse Position Monitor
 
@@ -123,8 +395,8 @@ Examples:
 You can add mouse clicks after the movement by adding click options:
 
 ```
-python a_.py X Y --left-click    # Left mouse button click
-python a_.py X Y --right-click   # Right mouse button click
+python a_.py --move X Y --click       # Left mouse button click
+python a_.py --move X Y --right-click # Right mouse button click
 ```
 
 #### Multiple Clicks
@@ -132,7 +404,7 @@ python a_.py X Y --right-click   # Right mouse button click
 Perform multiple clicks with a specified interval:
 
 ```
-python a_.py X Y --left-click --click-count 3 --click-interval 0.2
+python a_.py --move X Y --click --click-count 3 --click-interval 0.2
 ```
 
 This will perform 3 left clicks with a 0.2 second interval between each click.
@@ -142,7 +414,13 @@ This will perform 3 left clicks with a 0.2 second interval between each click.
 For double-clicks:
 
 ```
-python a_.py X Y --left-click --double
+python a_.py --move X Y --double-click
+```
+
+Or alternatively:
+
+```
+python a_.py --move X Y --click --double
 ```
 
 The `--double` flag overrides the `--click-count` parameter.
@@ -152,26 +430,17 @@ The `--double` flag overrides the `--click-count` parameter.
 Add a delay after clicking:
 
 ```
-python a_.py X Y --left-click --click-delay 1.5
+python a_.py --move X Y --click --click-delay 1.5
 ```
 
 Examples:
 
 ```
 # Move to (500, 300) and left-click
-python a_.py 500 300 --left-click
+./run.sh --move 500 300 --click
 
 # Move to (800, 400) and right-click
-python a_.py 800 400 --right-click
-
-# Move to (500, 300) and double left-click
-python a_.py 500 300 --left-click --double
-
-# Move to (800, 400), right-click, and wait 2 seconds after clicking
-python a_.py 800 400 --right-click --click-delay 2
-
-# Move to (500, 300) and perform 5 left clicks with 0.3s interval
-python a_.py 500 300 --left-click --click-count 5 --click-interval 0.3
+./run.sh --move 800 400 --right-click
 ```
 
 ### Drag Operations
@@ -179,7 +448,7 @@ python a_.py 500 300 --left-click --click-count 5 --click-interval 0.3
 You can perform drag operations by specifying start and end coordinates:
 
 ```
-python a_.py X Y --drag-to-x DX --drag-to-y DY
+python a_.py --move X Y --drag DX DY
 ```
 
 Where:
@@ -187,25 +456,34 @@ Where:
 - `X` and `Y` are the starting coordinates
 - `DX` and `DY` are the ending coordinates
 
+Alternatively, you can specify both start and end coordinates in a single command:
+
+```
+python a_.py --drag-from X1 Y1 X2 Y2
+```
+
+Where:
+
+- `X1` and `Y1` are the starting coordinates
+- `X2` and `Y2` are the ending coordinates
+
 #### Selecting the Drag Button
 
 By default, the left mouse button is used for dragging. You can specify which button to use:
 
 ```
-python a_.py X Y --drag-to-x DX --drag-to-y DY                # Left button drag (default)
-python a_.py X Y --left-click --drag-to-x DX --drag-to-y DY   # Left button drag (explicit)
-python a_.py X Y --right-click --drag-to-x DX --drag-to-y DY  # Right button drag
+python a_.py --move X Y --drag DX DY                # Left button drag (default)
+python a_.py --move X Y --click --drag DX DY        # Left button drag (explicit)
+python a_.py --move X Y --right-click --drag DX DY  # Right button drag
 ```
-
-The `--left-click` or `--right-click` flag determines which button is used for both dragging and any associated clicks.
 
 #### Smooth Dragging
 
 Drag with smooth movement (default) or disable it:
 
 ```
-python a_.py X Y --drag-to-x DX --drag-to-y DY                # Smooth drag (default)
-python a_.py X Y --drag-to-x DX --drag-to-y DY --no-drag-smooth  # Direct drag
+python a_.py --move X Y --drag DX DY                # Smooth drag (default)
+python a_.py --move X Y --drag DX DY --no-drag-smooth  # Direct drag
 ```
 
 #### Click and Drag Combinations
@@ -214,40 +492,40 @@ You can combine clicks with drag operations:
 
 ```
 # Click before starting the drag operation
-python a_.py X Y --drag-to-x DX --drag-to-y DY --click-before-drag
+python a_.py --move X Y --drag DX DY --click-before-drag
 
 # Click after completing the drag operation
-python a_.py X Y --drag-to-x DX --drag-to-y DY --click-after-drag
+python a_.py --move X Y --drag DX DY --click-after-drag
 
 # Click both before and after the drag operation
-python a_.py X Y --drag-to-x DX --drag-to-y DY --click-before-drag --click-after-drag
+python a_.py --move X Y --drag DX DY --click-before-drag --click-after-drag
 ```
 
-These options use the same button as specified by `--left-click` or `--right-click` (left button by default). All click options (count, interval, double, delay) apply to these clicks as well.
+All click options (count, interval, double, delay) apply to these clicks as well.
 
 Examples:
 
 ```
 # Drag from (100, 100) to (300, 300) with left button (default)
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300
+python a_.py --move 100 100 --drag 300 300
 
 # Drag from (200, 200) to (400, 400) with right button
-python a_.py 200 200 --right-click --drag-to-x 400 --drag-to-y 400
+python a_.py --move 200 200 --right-click --drag 400 400
 
 # Drag from (100, 100) to (300, 300) without smooth movement
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --no-drag-smooth
+python a_.py --move 100 100 --drag 300 300 --no-drag-smooth
 
 # Left-click, then drag from (100, 100) to (300, 300) with left button
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag
+python a_.py --move 100 100 --drag 300 300 --click-before-drag
 
 # Drag from (100, 100) to (300, 300) with left button, then left-click
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-after-drag
+python a_.py --move 100 100 --drag 300 300 --click-after-drag
 
 # Double-click with left button, drag from (100, 100) to (300, 300), then click again
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double
+python a_.py --move 100 100 --drag 300 300 --click-before-drag --click-after-drag --double
 
 # Double-click with right button, drag from (100, 100) to (300, 300) with right button, then right-click again
-python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double --right-click
+python a_.py --move 100 100 --drag 300 300 --click-before-drag --click-after-drag --double --right-click
 ```
 
 ### Keyboard Key Press
@@ -360,161 +638,53 @@ You can perform a sequence of actions in a single command using the sequence opt
 
 #### Simple Action Sequences
 
-The simplest way to perform a sequence of actions is using the `--do` option with a semicolon-separated list of actions:
+The simplest way to perform a sequence of actions is using the `--sequence` parameter with a simplified string syntax:
 
 ```
-python a_.py --do "action1; action2; action3"
+python a_.py --sequence "move 100 100; click left; wait 1; key enter; move 200 200; drag 300 300"
 ```
 
-Supported actions:
+The sequence is a semicolon-separated list of actions, where each action has a command and parameters.
 
-- `move X Y [--smooth]` - Move to coordinates X,Y with optional smooth movement
-- `click [left|right] [count] [--double]` - Click with specified button and count
+Available commands:
+
+- `move X Y [--smooth]` - Move to coordinates X,Y
+- `click [left|right] [count]` - Click with specified button and count
 - `key KEY [modifiers...]` - Press a key with optional modifiers
 - `wait SECONDS` - Wait for specified seconds
-- `drag X Y [options]` - Drag from current position to X,Y
-- `drag_from X1 Y1 X2 Y2 [options]` - Drag from X1,Y1 to X2,Y2
+- `drag X Y` - Drag from current position to X,Y
+- `drag_from X1 Y1 X2 Y2` - Drag from X1,Y1 to X2,Y2
 - `type "TEXT" [--interval=SECONDS]` - Type a sequence of text with optional typing speed
+- `scroll AMOUNT [--steps=COUNT] [--interval=SECONDS]` - Scroll up (positive) or down (negative)
 
-Drag options:
-
-- `--no-smooth` - Disable smooth movement during drag
-- `--click-before` - Perform a click before starting the drag
-- `--click-after` - Perform a click after completing the drag
-
-Examples:
-
-```
-# Move to (1298, 993), left-click, then press 'a'
-python a_.py --do "move 1298 993; click left; key a"
-
-# Move to (500, 300), wait 1 second, right-click, then press Enter
-python a_.py --do "move 500 300; wait 1; click right; key enter"
-
-# Move to (800, 600), left-click, then press Ctrl+S
-python a_.py --do "move 800 600; click left; key s ctrl"
-
-# Move smoothly to (1000, 500), double-click, wait 0.5 seconds, then press Escape
-python a_.py --do "move 1000 500 --smooth; click left --double; wait 0.5; key escape"
-
-# Move to (100, 100) and drag to (300, 300)
-python a_.py --do "move 100 100; drag 300 300"
-
-# Move to (100, 100), click before dragging, drag to (300, 300), then click after
-python a_.py --do "move 100 100; drag 300 300 --click-before --click-after"
-
-# Drag directly from (100, 100) to (300, 300) without smooth movement
-python a_.py --do "drag_from 100 100 300 300 --no-smooth"
-
-# Move to (500, 300), click, then type "Hello, world!"
-python a_.py --do "move 500 300; click left; type \"Hello, world!\""
-
-# Type text with a custom typing speed
-python a_.py --do "type \"This is slower text\" --interval=0.1"
-```
-
-This syntax is more flexible and concise than using multiple specialized command-line options.
-
-#### Move and Then Press a Key
-
-To move the mouse to coordinates and then press a key:
-
-```
-python a_.py X Y --then-key KEY [--modifiers MOD1 MOD2 ...] [options]
-```
-
-Example:
-
-```
-# Move to (1298, 993) and then press 'a'
-python a_.py 1298 993 --then-key a
-
-# Move to (500, 300) and then press Enter
-python a_.py 500 300 --then-key enter
-
-# Move to (800, 600) and then press Ctrl+S
-python a_.py 800 600 --then-key s --modifiers ctrl
-```
-
-#### Adding a Wait Between Actions
-
-You can add a wait between the mouse movement and key press:
-
-```
-python a_.py X Y --then-key KEY --then-wait SECONDS
-```
-
-Example:
-
-```
-# Move to (1298, 993), wait 2 seconds, then press 'a'
-python a_.py 1298 993 --then-key a --then-wait 2
-```
-
-#### Move and Then Click
-
-To move the mouse to coordinates and then click:
-
-```
-python a_.py X Y --then-click [left|right] [options]
-```
-
-Example:
-
-```
-# Move to (1298, 993) and then left-click
-python a_.py 1298 993 --then-click left
-
-# Move to (500, 300), wait 1 second, then right-click
-python a_.py 500 300 --then-click right --then-wait 1
-```
-
-#### Move, Click, and Then Press a Key
-
-To move the mouse to coordinates, click, and then press a key:
-
-```
-python a_.py X Y --then-key KEY --click-before-key [left|right] [options]
-```
-
-Example:
-
-```
-# Move to (1298, 993), left-click, then press 'a'
-python a_.py 1298 993 --then-key a --click-before-key left
-
-# Move to (500, 300), right-click, then press Enter
-python a_.py 500 300 --then-key enter --click-before-key right
-
-# Move to (800, 600), left-click, wait 1 second, then press Ctrl+S
-python a_.py 800 600 --then-key s --modifiers ctrl --click-before-key left --then-wait 1
-```
-
-You can combine this with other options like `--then-wait` to add delays between actions.
+This syntax supports all the main action types available in the program but with a more concise format. While it doesn't support every parameter that the JSON format does, it covers the most commonly used options for each action type.
 
 #### Advanced Sequences with JSON
 
-For more complex sequences, you can define a JSON sequence of actions:
+For more complex sequences of actions with full parameter control, you can use the `--sequence` parameter with a JSON string or file:
 
 ```
-python a_.py --sequence '[{"type":"move","x":1298,"y":993},{"type":"key","key":"a"}]'
+python a_.py --sequence '[{"type":"move","x":500,"y":300},{"type":"click","button":"left"}]'
+# or
+python a_.py --sequence path/to/sequence.json
 ```
 
-Or use a JSON file:
+The JSON should contain an array of action objects, each with a `type` field and appropriate parameters. This format provides access to all parameters supported by the program for each action type.
 
-```
-python a_.py --sequence sequence.json
-```
-
-Where `sequence.json` contains:
+Example JSON sequence:
 
 ```json
 [
   {
     "type": "move",
-    "x": 1298,
-    "y": 993,
+    "x": 500,
+    "y": 300,
     "smooth": true
+  },
+  {
+    "type": "click",
+    "button": "left",
+    "count": 2
   },
   {
     "type": "wait",
@@ -523,141 +693,80 @@ Where `sequence.json` contains:
   {
     "type": "key",
     "key": "a",
-    "count": 3,
-    "interval": 0.2
+    "modifiers": ["ctrl", "shift"]
+  },
+  {
+    "type": "scroll",
+    "amount": 10,
+    "steps": 15,
+    "interval": 0.02
+  },
+  {
+    "type": "move",
+    "x": 700,
+    "y": 400
+  },
+  {
+    "type": "drag_to",
+    "x": 900,
+    "y": 600
   }
 ]
 ```
 
-Supported action types:
+This provides the most flexibility for complex automation tasks.
 
-- `move`: Move the mouse to coordinates
-- `key`: Press a keyboard key
-- `click`: Perform a mouse click
-- `wait`: Wait for a specified time
+### Global Options
 
-### Movement Options
-
-#### Delay Before Movement
-
-You can add a delay before the mouse movement:
+You can set global options that apply to all actions in a sequence:
 
 ```
-python a_.py X Y -d SECONDS
+python a_.py --global-delay 0.5 --global-smooth --global-button right [other options]
 ```
 
-or
+Available global options:
+
+- `--global-delay SECONDS` - Add a delay between all actions
+- `--global-smooth` - Enable smooth movement for all move/drag actions
+- `--global-duration SECONDS` - Set default duration for all smooth movements
+- `--global-steps COUNT` - Set default steps for all smooth movements
+- `--global-button [left|right]` - Set default button for all click/drag actions
+- `--global-interval SECONDS` - Set default interval for all multi-actions
+
+### Shell Script Wrapper
+
+For convenience, a shell script wrapper is provided that activates the virtual environment and runs the script:
 
 ```
-python a_.py X Y --delay SECONDS
-```
-
-Example:
-
-```
-python a_.py 500 300 -d 2
-```
-
-This will wait for 2 seconds and then move the mouse cursor to the position with X=500 and Y=300.
-
-#### Smooth Movement
-
-You can enable smooth movement to make the mouse transition gradually to the target coordinates:
-
-```
-python a_.py X Y --smooth
-```
-
-This will move the mouse smoothly from its current position to the target coordinates.
-
-You can customize the smooth movement with these additional options:
-
-- `--duration SECONDS`: Set the duration of the smooth movement (default: 1.0 second)
-- `--steps NUMBER`: Set the number of steps for the smooth movement (default: 100)
-
-Example:
-
-```
-python a_.py 500 300 --smooth --duration 2.5 --steps 150
-```
-
-This will move the mouse smoothly to position (500, 300) over 2.5 seconds using 150 intermediate steps.
-
-Combine smooth movement with clicks or drags:
-
-```
-python a_.py 500 300 --smooth --left-click
-python a_.py 100 100 --smooth --drag-to-x 300 --drag-to-y 300
-```
-
-#### Screen Resolution Awareness
-
-The script detects your screen resolution and warns you if the coordinates are outside the screen boundaries. You can:
-
-- View your screen resolution:
-
-  ```
-  python a_.py --show-resolution
-  ```
-
-- Ignore screen boundary checks:
-  ```
-  python a_.py X Y --ignore-bounds
-  ```
-
-## Using the Run Script
-
-For convenience, you can use the provided run script which automatically handles the virtual environment:
-
-```
-./run.sh X Y [options]
+./run.sh [arguments]
 ```
 
 Examples:
 
 ```
-# Move the mouse
-./run.sh 500 300
+# Move to (500, 300)
+./run.sh --move 500 300
 
-# Move and click
-./run.sh 500 300 --left-click
+# Move to (500, 300) and left-click
+./run.sh --move 500 300 --click
 
-# Move smoothly and right-click
-./run.sh 500 300 --smooth --right-click
+# Move to (800, 400) and right-click
+./run.sh --move 800 400 --right-click
 
 # Perform multiple clicks
-./run.sh 500 300 --left-click --click-count 3 --click-interval 0.2
+./run.sh --move 500 300 --click --click-count 3 --click-interval 0.2
 
 # Perform a drag operation
-./run.sh 100 100 --drag-to-x 300 --drag-to-y 300
+./run.sh --move 100 100 --drag 300 300
 
 # Click, then drag, then click again
-./run.sh 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag
+./run.sh --move 100 100 --drag 300 300 --click-before-drag --click-after-drag
 
 # Double-click with right button, drag with right button, then right-click again
-./run.sh 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double --right-click
+./run.sh --move 100 100 --drag 300 300 --click-before-drag --click-after-drag --double --right-click
 
 # Monitor mouse position
 ./run.sh --monitor
-
-# Keyboard examples with run.sh
-./run.sh --key a
-./run.sh --key enter
-./run.sh --key c --modifiers ctrl
-./run.sh --key delete --modifiers ctrl alt
-./run.sh --key space --key-count 5 --key-interval 0.2
-./run.sh --type "Hello, world!"
-
-# Sequential action examples with run.sh
-./run.sh 1298 993 --then-key a
-./run.sh 500 300 --then-key enter --then-wait 1
-./run.sh 800 600 --then-click left
-./run.sh 1298 993 --then-key a --click-before-key left
-./run.sh --do "move 1298 993; click left; key a"
-./run.sh --do "move 500 300; wait 1; click right; key enter"
-./run.sh --do "move 100 100; drag 300 300 --click-before --click-after"
-./run.sh --do "move 500 300; click left; type \"Hello, world!\""
-./run.sh --sequence '[{"type":"move","x":1298,"y":993},{"type":"key","key":"a"}]'
 ```
 
 ## Making the Script Executable (Linux/macOS)
@@ -666,7 +775,7 @@ You can make the script executable to run it directly:
 
 ```
 chmod +x a_.py
-./a_.py X Y [options]
+./a_.py [options]
 ```
 
 ## Requirements

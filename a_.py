@@ -243,6 +243,35 @@ def perform_click(button='left', count=1, interval=0.1, double=False, delay_afte
         time.sleep(delay_after)
 
 
+def perform_scroll(amount, steps=10, interval=0.01, delay_after=0):
+    """
+    Perform mouse scroll at the current position.
+
+    Args:
+        amount (int): Amount to scroll (positive for up, negative for down)
+        steps (int): Number of steps to divide the scroll into
+        interval (float): Time between scroll steps in seconds
+        delay_after (float): Delay in seconds after scrolling is done
+    """
+    mouse = MouseController()
+
+    # Calculate step size
+    step_size = amount / steps
+
+    print(
+        f"Scrolling {'up' if amount > 0 else 'down'} by {abs(amount)} units at {mouse.position}")
+
+    # Perform scrolling in steps
+    for i in range(steps):
+        mouse.scroll(0, step_size)
+        if i < steps - 1:  # Don't sleep after the last step
+            time.sleep(interval)
+
+    if delay_after > 0:
+        print(f"Waiting for {delay_after} seconds after scrolling...")
+        time.sleep(delay_after)
+
+
 def perform_drag(start_x, start_y, end_x, end_y, button='left', smooth=True, duration=1.0, steps=100, delay_after=0,
                  click_before=False, click_after=False, click_button=None, click_count=1, click_interval=0.1,
                  double_click=False, click_delay=0):
@@ -593,6 +622,13 @@ def perform_sequence(actions):
                 action.get('interval', 0.05),
                 action.get('delay_after', 0)
             )
+        elif action['type'] == 'scroll':
+            perform_scroll(
+                action['amount'],
+                action.get('steps', 10),
+                action.get('interval', 0.01),
+                action.get('delay_after', 0)
+            )
         else:
             print(
                 f"Warning: Unknown action type '{action['type']}'. Skipping.")
@@ -617,6 +653,7 @@ def parse_action_sequence(sequence_str):
     - "drag X Y" - Drag from current position to X,Y
     - "drag_from X1 Y1 X2 Y2" - Drag from X1,Y1 to X2,Y2
     - "type TEXT" - Type a sequence of text
+    - "scroll AMOUNT" - Scroll up (positive) or down (negative)
 
     Args:
         sequence_str (str): String containing sequence of actions
@@ -695,6 +732,38 @@ def parse_action_sequence(sequence_str):
             except ValueError:
                 print(
                     f"Warning: Invalid wait time in '{action_str}'. Skipping.")
+
+        elif action_type == 'scroll' and len(parts) >= 2:
+            try:
+                amount = int(parts[1])
+                steps = 10  # Default steps
+                interval = 0.01  # Default interval
+
+                # Extract options
+                for part in parts[2:]:
+                    if part.startswith('--steps='):
+                        try:
+                            steps = int(part.split('=')[1])
+                        except (ValueError, IndexError):
+                            print(
+                                f"Warning: Invalid steps in '{part}'. Using default.")
+                    elif part.startswith('--interval='):
+                        try:
+                            interval = float(part.split('=')[1])
+                        except (ValueError, IndexError):
+                            print(
+                                f"Warning: Invalid interval in '{part}'. Using default.")
+
+                action = {
+                    'type': 'scroll',
+                    'amount': amount,
+                    'steps': steps,
+                    'interval': interval
+                }
+                actions.append(action)
+            except ValueError:
+                print(
+                    f"Warning: Invalid scroll amount in '{action_str}'. Skipping.")
 
         elif action_type == 'drag' and len(parts) >= 3:
             try:
@@ -785,10 +854,23 @@ def main():
     parser = argparse.ArgumentParser(
         description='Move the mouse to specified coordinates and optionally click or drag.')
 
-    parser.add_argument('x', type=int, nargs='?',
-                        help='X coordinate')
-    parser.add_argument('y', type=int, nargs='?',
-                        help='Y coordinate')
+    # Add move action
+    parser.add_argument('--move', type=int, nargs=2, metavar=('X', 'Y'),
+                        help='Move the mouse to the specified X Y coordinates')
+
+    # Global parameters
+    parser.add_argument('--global-delay', type=float, default=0,
+                        help='Global delay between all actions (default: 0)')
+    parser.add_argument('--global-smooth', action='store_true',
+                        help='Enable smooth movement for all move/drag actions')
+    parser.add_argument('--global-duration', type=float, default=1.0,
+                        help='Default duration for all smooth movements (default: 1.0)')
+    parser.add_argument('--global-steps', type=int, default=100,
+                        help='Default steps for all smooth movements (default: 100)')
+    parser.add_argument('--global-button', choices=['left', 'right'], default='left',
+                        help='Default button for all click/drag actions (default: left)')
+    parser.add_argument('--global-interval', type=float, default=0.1,
+                        help='Default interval for all multi-actions (clicks, key presses) (default: 0.1)')
 
     # Movement options
     parser.add_argument('-d', '--delay', type=float, default=0,
@@ -804,10 +886,12 @@ def main():
 
     # Click options
     click_group = parser.add_argument_group('Click options')
-    click_group.add_argument('--left-click', action='store_true',
-                             help='Perform a left click after moving the mouse')
+    click_group.add_argument('--click', action='store_true',
+                             help='Perform a left click')
     click_group.add_argument('--right-click', action='store_true',
-                             help='Perform a right click after moving the mouse')
+                             help='Perform a right click')
+    click_group.add_argument('--double-click', action='store_true',
+                             help='Perform a double-click')
     click_group.add_argument('--click-count', type=int, default=1,
                              help='Number of clicks to perform (default: 1)')
     click_group.add_argument('--click-interval', type=float, default=0.1,
@@ -817,12 +901,23 @@ def main():
     click_group.add_argument('--click-delay', type=float, default=0,
                              help='Delay in seconds after clicking (default: 0)')
 
+    # Scroll options
+    scroll_group = parser.add_argument_group('Scroll options')
+    scroll_group.add_argument('--scroll', type=int,
+                              help='Scroll by the specified amount (positive for up, negative for down)')
+    scroll_group.add_argument('--scroll-steps', type=int, default=10,
+                              help='Number of steps to divide the scroll into (default: 10)')
+    scroll_group.add_argument('--scroll-interval', type=float, default=0.01,
+                              help='Time between scroll steps in seconds (default: 0.01)')
+    scroll_group.add_argument('--scroll-delay', type=float, default=0,
+                              help='Delay in seconds after scrolling (default: 0)')
+
     # Drag options
     drag_group = parser.add_argument_group('Drag options')
-    drag_group.add_argument('--drag-to-x', type=int,
-                            help='X coordinate to drag to')
-    drag_group.add_argument('--drag-to-y', type=int,
-                            help='Y coordinate to drag to')
+    drag_group.add_argument('--drag', type=int, nargs=2, metavar=('X', 'Y'),
+                            help='Drag to the specified X Y coordinates')
+    drag_group.add_argument('--drag-from', type=int, nargs=4, metavar=('X1', 'Y1', 'X2', 'Y2'),
+                            help='Drag from X1 Y1 to X2 Y2')
     drag_group.add_argument('--no-drag-smooth', action='store_true',
                             help='Disable smooth movement during drag')
     drag_group.add_argument('--click-before-drag', action='store_true',
@@ -849,20 +944,14 @@ def main():
     keyboard_group.add_argument('--type-delay', type=float, default=0,
                                 help='Delay in seconds after typing (default: 0)')
 
+    # Wait option
+    parser.add_argument('--wait', type=float,
+                        help='Wait for the specified number of seconds')
+
     # Sequence options
     sequence_group = parser.add_argument_group('Sequence options')
     sequence_group.add_argument('--sequence', type=str,
                                 help='JSON string or file path defining a sequence of actions to perform')
-    sequence_group.add_argument('--then-key', type=str,
-                                help='Key to press after moving the mouse (shorthand for sequence)')
-    sequence_group.add_argument('--then-wait', type=float,
-                                help='Seconds to wait between mouse movement and key press (used with --then-key)')
-    sequence_group.add_argument('--then-click', choices=['left', 'right'],
-                                help='Perform a click after moving the mouse (shorthand for sequence)')
-    sequence_group.add_argument('--click-before-key', choices=['left', 'right'],
-                                help='Perform a click before pressing the key (used with --then-key)')
-    sequence_group.add_argument('--do', type=str,
-                                help='Perform a sequence of actions in a simple format: "move X Y; click left; key a"')
 
     # Monitor options
     monitor_group = parser.add_argument_group('Monitor options')
@@ -896,22 +985,214 @@ def main():
         )
         return
 
+    # Build action sequence from command-line arguments
+    actions = []
+    global_delay = args.global_delay
+
+    # Add move action if specified
+    if args.move:
+        actions.append({
+            'type': 'move',
+            'x': args.move[0],
+            'y': args.move[1],
+            'delay': args.delay,
+            'check_bounds': not args.ignore_bounds,
+            'smooth': args.smooth or args.global_smooth,
+            'smooth_duration': args.duration if args.duration != 1.0 else args.global_duration,
+            'smooth_steps': args.steps if args.steps != 100 else args.global_steps
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add click action if specified
+    if args.click:
+        actions.append({
+            'type': 'click',
+            'button': 'left',
+            'count': args.click_count,
+            'interval': args.click_interval if args.click_interval != 0.1 else args.global_interval,
+            'double': False,
+            'delay_after': args.click_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+    elif args.right_click:
+        actions.append({
+            'type': 'click',
+            'button': 'right',
+            'count': args.click_count,
+            'interval': args.click_interval if args.click_interval != 0.1 else args.global_interval,
+            'double': False,
+            'delay_after': args.click_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+    elif args.double_click:
+        actions.append({
+            'type': 'click',
+            'button': 'left',
+            'count': 1,
+            'interval': args.click_interval if args.click_interval != 0.1 else args.global_interval,
+            'double': True,
+            'delay_after': args.click_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add wait action if specified
+    if args.wait:
+        actions.append({
+            'type': 'wait',
+            'seconds': args.wait
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add scroll action if specified
+    if args.scroll is not None:
+        actions.append({
+            'type': 'scroll',
+            'amount': args.scroll,
+            'steps': args.scroll_steps,
+            'interval': args.scroll_interval,
+            'delay_after': args.scroll_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add drag action if specified
+    if args.drag:
+        # Need a previous move action to get starting coordinates
+        if not actions or actions[-1]['type'] != 'move':
+            parser.error(
+                "--drag requires a preceding --move to set the starting position")
+
+        start_x = actions[-1]['x']
+        start_y = actions[-1]['y']
+        end_x = args.drag[0]
+        end_y = args.drag[1]
+
+        actions.append({
+            'type': 'move',
+            'x': start_x,
+            'y': start_y,
+            'drag_to_x': end_x,
+            'drag_to_y': end_y,
+            'drag_smooth': not args.no_drag_smooth,
+            'click_before_drag': args.click_before_drag,
+            'click_after_drag': args.click_after_drag
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+    elif args.drag_from:
+        start_x = args.drag_from[0]
+        start_y = args.drag_from[1]
+        end_x = args.drag_from[2]
+        end_y = args.drag_from[3]
+
+        actions.append({
+            'type': 'move',
+            'x': start_x,
+            'y': start_y,
+            'drag_to_x': end_x,
+            'drag_to_y': end_y,
+            'drag_smooth': not args.no_drag_smooth,
+            'click_before_drag': args.click_before_drag,
+            'click_after_drag': args.click_after_drag
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add type action if specified
+    if args.type:
+        actions.append({
+            'type': 'type',
+            'text': args.type,
+            'interval': args.type_interval if args.type_interval != 0.05 else args.global_interval,
+            'delay_after': args.type_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
+    # Add key action if specified
+    if args.key:
+        actions.append({
+            'type': 'key',
+            'key': args.key,
+            'modifiers': args.modifiers,
+            'count': args.key_count,
+            'interval': args.key_interval if args.key_interval != 0.1 else args.global_interval,
+            'delay_after': args.key_delay
+        })
+
+        # Add global delay if specified
+        if global_delay > 0:
+            actions.append({
+                'type': 'wait',
+                'seconds': global_delay
+            })
+
     # Keyboard mode (standalone)
-    if args.key and not (args.x is not None and args.y is not None) and not args.sequence and not args.then_key:
+    if args.key and not actions:
         perform_key_press(
             args.key,
             args.modifiers,
             args.key_count,
-            args.key_interval,
+            args.key_interval if args.key_interval != 0.1 else args.global_interval,
             args.key_delay
         )
         return
 
     # Type mode (standalone)
-    if args.type and not (args.x is not None and args.y is not None) and not args.sequence:
+    if args.type and not actions:
         perform_type(
             args.type,
-            args.type_interval,
+            args.type_interval if args.type_interval != 0.05 else args.global_interval,
             args.type_delay
         )
         return
@@ -939,137 +1220,13 @@ def main():
         except Exception as e:
             parser.error(f"Error processing sequence: {str(e)}")
 
-    # Shorthand sequence: move then key
-    if args.x is not None and args.y is not None and args.then_key:
-        actions = [
-            {
-                'type': 'move',
-                'x': args.x,
-                'y': args.y,
-                'delay': args.delay,
-                'check_bounds': not args.ignore_bounds,
-                'smooth': args.smooth,
-                'smooth_duration': args.duration,
-                'smooth_steps': args.steps
-            }
-        ]
-
-        # Add click before key if specified
-        if args.click_before_key:
-            actions.append({
-                'type': 'click',
-                'button': args.click_before_key,
-                'count': args.click_count,
-                'interval': args.click_interval,
-                'double': args.double
-            })
-
-        # Add wait if specified
-        if args.then_wait:
-            actions.append({
-                'type': 'wait',
-                'seconds': args.then_wait
-            })
-
-        # Add key press
-        actions.append({
-            'type': 'key',
-            'key': args.then_key,
-            'modifiers': args.modifiers,
-            'count': args.key_count,
-            'interval': args.key_interval,
-            'delay_after': args.key_delay
-        })
-
+    # Execute the action sequence
+    if actions:
         perform_sequence(actions)
         return
-
-    # Shorthand sequence: move then click
-    if args.x is not None and args.y is not None and args.then_click:
-        actions = [
-            {
-                'type': 'move',
-                'x': args.x,
-                'y': args.y,
-                'delay': args.delay,
-                'check_bounds': not args.ignore_bounds,
-                'smooth': args.smooth,
-                'smooth_duration': args.duration,
-                'smooth_steps': args.steps
-            },
-            {
-                'type': 'click',
-                'button': args.then_click,
-                'count': args.click_count,
-                'interval': args.click_interval,
-                'double': args.double,
-                'delay_after': args.click_delay
-            }
-        ]
-
-        # Add wait if specified
-        if args.then_wait and len(actions) > 1:
-            actions.insert(1, {
-                'type': 'wait',
-                'seconds': args.then_wait
-            })
-
-        perform_sequence(actions)
-        return
-
-    # Simple sequence mode
-    if args.do:
-        try:
-            actions = parse_action_sequence(args.do)
-            if actions:
-                perform_sequence(actions)
-            else:
-                parser.error("No valid actions found in the sequence")
-            return
-        except Exception as e:
-            parser.error(f"Error processing sequence: {str(e)}")
-
-    # If no coordinates are provided and not in monitor, keyboard, or sequence mode, show help
-    if args.x is None or args.y is None:
+    else:
         parser.error(
-            "the following arguments are required: x, y (unless --show-resolution, --monitor, --key, or --sequence is specified)")
-
-    # Determine which click to perform (if any)
-    click = None
-    if args.left_click:
-        click = 'left'
-    elif args.right_click:
-        click = 'right'
-
-    # Check if drag coordinates are provided
-    drag_to_x = args.drag_to_x
-    drag_to_y = args.drag_to_y
-
-    # Both drag coordinates must be provided or none
-    if (drag_to_x is None) != (drag_to_y is None):
-        parser.error(
-            "Both --drag-to-x and --drag-to-y must be provided for drag operation")
-
-    # Move the mouse (and click/drag if requested)
-    move_mouse(
-        args.x,
-        args.y,
-        args.delay,
-        not args.ignore_bounds,
-        args.smooth,
-        args.duration,
-        args.steps,
-        click,
-        args.click_count,
-        args.click_interval,
-        args.double,
-        args.click_delay,
-        drag_to_x,
-        drag_to_y,
-        not args.no_drag_smooth,
-        args.click_before_drag,
-        args.click_after_drag
-    )
+            "No actions specified. Use --move, --click, --key, --type, --drag, or other action parameters.")
 
 
 if __name__ == "__main__":
