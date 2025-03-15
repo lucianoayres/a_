@@ -390,6 +390,78 @@ Examples:
 ./run.sh --monitor --no-monitor-clicks
 ```
 
+### Multi-Monitor Support
+
+The utility supports working with multiple monitors. You can list all detected monitors, and specify which monitor to use for your automation tasks.
+
+#### Listing Monitors
+
+To see all detected monitors and their properties:
+
+```
+python a_.py --list-monitors
+```
+
+This will display a table showing:
+
+- Monitor index
+- Monitor name
+- Resolution
+- Position (offset from the primary monitor)
+- Whether it's the primary monitor
+
+#### Targeting a Specific Monitor
+
+By default, coordinates are relative to the primary monitor. To target a specific monitor:
+
+```
+python a_.py --monitor-index 1 --move 500 300
+```
+
+This will move the mouse to coordinates (500, 300) on monitor with index 1. The coordinates are relative to the top-left corner of the specified monitor.
+
+#### Examples
+
+```
+# List all monitors
+python a_.py --list-monitors
+
+# Move to position on the primary monitor
+python a_.py --move 500 300
+
+# Move to position on the second monitor
+python a_.py --monitor-index 1 --move 500 300
+
+# Click on the third monitor
+python a_.py --monitor-index 2 --move 500 300 --click
+
+# Drag on a specific monitor
+python a_.py --monitor-index 1 --move 100 100 --drag 300 300
+
+# Complex sequence on a specific monitor
+python a_.py --monitor-index 1 --move 500 300 --click --type "Hello" --key tab
+```
+
+#### Using with Sequences
+
+When using the `--sequence` parameter with JSON, you can specify the monitor index for each move action:
+
+```json
+[
+  {
+    "type": "move",
+    "x": 500,
+    "y": 300,
+    "monitor_index": 1,
+    "smooth": true
+  },
+  {
+    "type": "click",
+    "button": "left"
+  }
+]
+```
+
 ### Mouse Clicks
 
 You can add mouse clicks after the movement by adding click options:

@@ -20,13 +20,224 @@ import os
 import shlex
 
 
+def get_all_monitors():
+    """
+    Get information about all connected monitors.
+
+    Returns:
+        list: List of dictionaries containing monitor information
+              Each dictionary has keys: 'index', 'x', 'y', 'width', 'height', 'primary'
+    """
+    monitors = []
+    system = platform.system()
+
+    if system == "Linux":
+        try:
+            # Use xrandr to get monitor information
+            output = subprocess.check_output(
+                ["xrandr", "--current"], text=True)
+
+            # Parse the output to extract monitor information
+            current_monitor = None
+            monitor_index = 0
+
+            for line in output.split('\n'):
+                # Check for connected displays
+                if " connected " in line:
+                    monitor_name = line.split(' ')[0]
+                    is_primary = "primary" in line
+
+                    # Extract resolution and position if available in this line
+                    position_match = re.search(
+                        r'(\d+)x(\d+)\+(\d+)\+(\d+)', line)
+
+                    if position_match:
+                        width = int(position_match.group(1))
+                        height = int(position_match.group(2))
+                        x = int(position_match.group(3))
+                        y = int(position_match.group(4))
+
+                        monitors.append({
+                            'index': monitor_index,
+                            'name': monitor_name,
+                            'x': x,
+                            'y': y,
+                            'width': width,
+                            'height': height,
+                            'primary': is_primary
+                        })
+
+                        monitor_index += 1
+                    else:
+                        current_monitor = {
+                            'index': monitor_index,
+                            'name': monitor_name,
+                            'primary': is_primary
+                        }
+
+                # If we have a current monitor but no position yet, look for resolution line
+                elif current_monitor and line.strip().startswith(current_monitor['name']):
+                    position_match = re.search(
+                        r'(\d+)x(\d+)\+(\d+)\+(\d+)', line)
+
+                    if position_match:
+                        width = int(position_match.group(1))
+                        height = int(position_match.group(2))
+                        x = int(position_match.group(3))
+                        y = int(position_match.group(4))
+
+                        current_monitor.update({
+                            'x': x,
+                            'y': y,
+                            'width': width,
+                            'height': height
+                        })
+
+                        monitors.append(current_monitor)
+                        current_monitor = None
+                        monitor_index += 1
+
+                # If we're processing a monitor and find a resolution line
+                elif current_monitor and "*current" in line:
+                    res_match = re.search(r'(\d+)x(\d+)', line)
+                    if res_match:
+                        current_monitor['width'] = int(res_match.group(1))
+                        current_monitor['height'] = int(res_match.group(2))
+                        # Assume position 0,0 if not specified
+                        current_monitor['x'] = current_monitor.get('x', 0)
+                        current_monitor['y'] = current_monitor.get('y', 0)
+
+                        monitors.append(current_monitor)
+                        current_monitor = None
+                        monitor_index += 1
+
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Error detecting monitors using xrandr: {e}")
+
+    elif system == "Darwin":  # macOS
+        try:
+            # Use system_profiler to get display information
+            output = subprocess.check_output(
+                ["system_profiler", "SPDisplaysDataType"], text=True)
+
+            # Parse the output to extract monitor information
+            monitor_index = 0
+            current_monitor = None
+
+            for line in output.split('\n'):
+                if "Resolution:" in line:
+                    res_match = re.search(r'Resolution: (\d+) x (\d+)', line)
+                    if res_match and current_monitor:
+                        current_monitor['width'] = int(res_match.group(1))
+                        current_monitor['height'] = int(res_match.group(2))
+
+                elif "Origin:" in line:
+                    origin_match = re.search(r'Origin: \((\d+), (\d+)\)', line)
+                    if origin_match and current_monitor:
+                        current_monitor['x'] = int(origin_match.group(1))
+                        current_monitor['y'] = int(origin_match.group(2))
+
+                        # If we have all the information, add the monitor
+                        if all(k in current_monitor for k in ['width', 'height', 'x', 'y']):
+                            monitors.append(current_monitor)
+                            monitor_index += 1
+                            current_monitor = None
+
+                elif "Display Type:" in line or "Display:" in line:
+                    # Start a new monitor
+                    if current_monitor:
+                        # If we have a partial monitor, add default values
+                        current_monitor.setdefault('x', 0)
+                        current_monitor.setdefault('y', 0)
+                        if 'width' in current_monitor and 'height' in current_monitor:
+                            monitors.append(current_monitor)
+                            monitor_index += 1
+
+                    display_name = line.split(':')[1].strip(
+                    ) if ':' in line else f"Display {monitor_index}"
+                    current_monitor = {
+                        'index': monitor_index,
+                        'name': display_name,
+                        'primary': monitor_index == 0  # Assume first display is primary
+                    }
+
+            # Add the last monitor if it exists
+            if current_monitor and 'width' in current_monitor and 'height' in current_monitor:
+                current_monitor.setdefault('x', 0)
+                current_monitor.setdefault('y', 0)
+                monitors.append(current_monitor)
+
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Error detecting monitors using system_profiler: {e}")
+
+    elif system == "Windows":
+        try:
+            # Use PowerShell to get monitor information
+            ps_command = """
+            Add-Type -AssemblyName System.Windows.Forms
+            [System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+                $bounds = $_.Bounds
+                $isPrimary = $_.Primary
+                "$($bounds.X),$($bounds.Y),$($bounds.Width),$($bounds.Height),$($isPrimary)"
+            }
+            """
+            output = subprocess.check_output(
+                ["powershell", "-Command", ps_command], text=True)
+
+            for i, line in enumerate(output.strip().split('\n')):
+                parts = line.strip().split(',')
+                if len(parts) == 5:
+                    x, y, width, height, is_primary = parts
+                    monitors.append({
+                        'index': i,
+                        'name': f"Display {i+1}",
+                        'x': int(x),
+                        'y': int(y),
+                        'width': int(width),
+                        'height': int(height),
+                        'primary': is_primary.lower() == 'true'
+                    })
+
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Error detecting monitors using PowerShell: {e}")
+
+    # If no monitors were detected, add a fallback monitor
+    if not monitors:
+        # Try to get at least one monitor using the old method
+        width, height = get_screen_resolution()
+        monitors.append({
+            'index': 0,
+            'name': 'Default Display',
+            'x': 0,
+            'y': 0,
+            'width': width,
+            'height': height,
+            'primary': True
+        })
+
+    return monitors
+
+
 def get_screen_resolution():
     """
-    Get the screen resolution based on the operating system.
+    Get the screen resolution of the primary monitor.
 
     Returns:
         tuple: (width, height) of the primary monitor
     """
+    # Try to get all monitors first
+    monitors = get_all_monitors()
+
+    # Find the primary monitor
+    for monitor in monitors:
+        if monitor.get('primary', False):
+            return monitor['width'], monitor['height']
+
+    # If no primary monitor found, use the first one
+    if monitors:
+        return monitors[0]['width'], monitors[0]['height']
+
+    # Fallback methods if get_all_monitors failed
     system = platform.system()
 
     if system == "Linux":
@@ -87,6 +298,82 @@ def get_screen_resolution():
 
     # Last resort default
     return (1920, 1080)
+
+
+def get_monitor_by_index(index):
+    """
+    Get monitor information by index.
+
+    Args:
+        index (int): The index of the monitor to retrieve
+
+    Returns:
+        dict: Monitor information or None if not found
+    """
+    monitors = get_all_monitors()
+
+    for monitor in monitors:
+        if monitor['index'] == index:
+            return monitor
+
+    return None
+
+
+def list_monitors():
+    """
+    Print information about all detected monitors.
+    """
+    monitors = get_all_monitors()
+
+    print("\nDetected Monitors:")
+    print("=" * 80)
+    print(f"{'Index':<6} | {'Name':<20} | {'Resolution':<12} | {'Position':<12} | {'Primary':<7}")
+    print("-" * 80)
+
+    for monitor in monitors:
+        resolution = f"{monitor['width']}x{monitor['height']}"
+        position = f"+{monitor['x']},+{monitor['y']}"
+        primary = "Yes" if monitor['primary'] else "No"
+        print(f"{monitor['index']:<6} | {monitor['name'][:20]:<20} | {resolution:<12} | "
+              f"{position:<12} | {primary:<7}")
+
+    print("=" * 80)
+
+
+def convert_to_global_coordinates(x, y, monitor_index=None):
+    """
+    Convert monitor-relative coordinates to global screen coordinates.
+
+    Args:
+        x (int): X coordinate relative to the monitor
+        y (int): Y coordinate relative to the monitor
+        monitor_index (int): Index of the monitor (None for primary)
+
+    Returns:
+        tuple: (global_x, global_y) coordinates
+    """
+    monitors = get_all_monitors()
+
+    # If no monitor index specified, use primary
+    if monitor_index is None:
+        for monitor in monitors:
+            if monitor.get('primary', False):
+                return x + monitor['x'], y + monitor['y']
+
+        # If no primary found, use first monitor
+        if monitors:
+            return x + monitors[0]['x'], y + monitors[0]['y']
+        return x, y
+
+    # Find the specified monitor
+    for monitor in monitors:
+        if monitor['index'] == monitor_index:
+            return x + monitor['x'], y + monitor['y']
+
+    # Monitor not found, return original coordinates
+    print(
+        f"Warning: Monitor with index {monitor_index} not found. Using coordinates as-is.")
+    return x, y
 
 
 def monitor_mouse_position(update_interval=0.1, show_clicks=True, duration=None):
@@ -351,13 +638,13 @@ def perform_drag(start_x, start_y, end_x, end_y, button='left', smooth=True, dur
 def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100,
                click=None, click_count=1, click_interval=0.1, double_click=False, click_delay=0,
                drag_to_x=None, drag_to_y=None, drag_smooth=True,
-               click_before_drag=False, click_after_drag=False):
+               click_before_drag=False, click_after_drag=False, monitor_index=None):
     """
     Move the mouse to the specified coordinates and optionally click or drag.
 
     Args:
-        x (int): X coordinate
-        y (int): Y coordinate
+        x (int): X coordinate relative to the monitor
+        y (int): Y coordinate relative to the monitor
         delay (float): Delay in seconds before moving the mouse
         check_bounds (bool): Whether to check if coordinates are within screen bounds
         smooth (bool): Whether to move the mouse smoothly to the target
@@ -373,28 +660,50 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         drag_smooth (bool): Whether to move smoothly during the drag
         click_before_drag (bool): Whether to click before dragging
         click_after_drag (bool): Whether to click after dragging
+        monitor_index (int): Index of the monitor to use (None for primary)
     """
     mouse = MouseController()
 
-    if check_bounds:
-        screen_width, screen_height = get_screen_resolution()
-        print(f"Detected screen resolution: {screen_width}x{screen_height}")
+    # Convert monitor-relative coordinates to global screen coordinates
+    global_x, global_y = convert_to_global_coordinates(x, y, monitor_index)
 
-        # Check initial coordinates
+    # Also convert drag coordinates if specified
+    global_drag_to_x, global_drag_to_y = None, None
+    if drag_to_x is not None and drag_to_y is not None:
+        global_drag_to_x, global_drag_to_y = convert_to_global_coordinates(
+            drag_to_x, drag_to_y, monitor_index)
+
+    if check_bounds:
+        # Get the specific monitor bounds
+        if monitor_index is not None:
+            monitor = get_monitor_by_index(monitor_index)
+            if monitor:
+                screen_width, screen_height = monitor['width'], monitor['height']
+                print(
+                    f"Using monitor {monitor_index} ({monitor['name']}): {screen_width}x{screen_height}")
+            else:
+                screen_width, screen_height = get_screen_resolution()
+                print(
+                    f"Monitor {monitor_index} not found. Using primary monitor: {screen_width}x{screen_height}")
+        else:
+            screen_width, screen_height = get_screen_resolution()
+            print(f"Using primary monitor: {screen_width}x{screen_height}")
+
+        # Check initial coordinates (relative to the monitor)
         if x < 0 or x >= screen_width or y < 0 or y >= screen_height:
             print(
-                f"Warning: Coordinates ({x}, {y}) are outside screen bounds ({screen_width}x{screen_height})")
+                f"Warning: Coordinates ({x}, {y}) are outside monitor bounds ({screen_width}x{screen_height})")
             print("Do you want to continue anyway? (y/n)")
             response = input().lower()
             if response != 'y' and response != 'yes':
                 print("Operation cancelled.")
                 return
 
-        # Check drag coordinates if applicable
+        # Check drag coordinates if applicable (relative to the monitor)
         if drag_to_x is not None and drag_to_y is not None:
             if drag_to_x < 0 or drag_to_x >= screen_width or drag_to_y < 0 or drag_to_y >= screen_height:
                 print(
-                    f"Warning: Drag coordinates ({drag_to_x}, {drag_to_y}) are outside screen bounds ({screen_width}x{screen_height})")
+                    f"Warning: Drag coordinates ({drag_to_x}, {drag_to_y}) are outside monitor bounds ({screen_width}x{screen_height})")
                 print("Do you want to continue anyway? (y/n)")
                 response = input().lower()
                 if response != 'y' and response != 'yes':
@@ -405,20 +714,22 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         print(f"Waiting for {delay} seconds before moving mouse...")
         time.sleep(delay)
 
-    # Move to the initial position
+    # Move to the initial position (using global coordinates)
     if smooth:
         # Get current mouse position as starting point
         current_pos = mouse.position
-        smooth_move(current_pos[0], current_pos[1], x,
-                    y, smooth_duration, smooth_steps)
+        smooth_move(current_pos[0], current_pos[1], global_x,
+                    global_y, smooth_duration, smooth_steps)
     else:
-        print(f"Moving mouse to coordinates: ({x}, {y})")
-        mouse.position = (x, y)
+        print(
+            f"Moving mouse to coordinates: ({x}, {y}) on monitor {monitor_index if monitor_index is not None else 'primary'}")
+        print(f"Global coordinates: ({global_x}, {global_y})")
+        mouse.position = (global_x, global_y)
         print(f"Current mouse position: {mouse.position}")
 
-    # Perform drag if coordinates are provided
-    if drag_to_x is not None and drag_to_y is not None:
-        perform_drag(x, y, drag_to_x, drag_to_y,
+    # Perform drag if coordinates are provided (using global coordinates)
+    if global_drag_to_x is not None and global_drag_to_y is not None:
+        perform_drag(global_x, global_y, global_drag_to_x, global_drag_to_y,
                      button=click or 'left',  # Use click button or default to left
                      smooth=drag_smooth,
                      duration=smooth_duration,
@@ -594,7 +905,8 @@ def perform_sequence(actions):
                 action.get('drag_to_y'),
                 action.get('drag_smooth', True),
                 action.get('click_before_drag', False),
-                action.get('click_after_drag', False)
+                action.get('click_after_drag', False),
+                action.get('monitor_index')
             )
         elif action['type'] == 'key':
             perform_key_press(
@@ -872,6 +1184,21 @@ def main():
     parser.add_argument('--global-interval', type=float, default=0.1,
                         help='Default interval for all multi-actions (clicks, key presses) (default: 0.1)')
 
+    # Monitor options
+    monitor_group = parser.add_argument_group('Monitor options')
+    monitor_group.add_argument('--monitor', action='store_true',
+                               help='Monitor and display mouse position in real-time')
+    monitor_group.add_argument('--monitor-interval', type=float, default=0.1,
+                               help='Update interval for monitor in seconds (default: 0.1)')
+    monitor_group.add_argument('--monitor-duration', type=float,
+                               help='Duration to monitor in seconds (default: indefinite)')
+    monitor_group.add_argument('--no-monitor-clicks', action='store_true',
+                               help='Disable click detection in monitor mode')
+    monitor_group.add_argument('--list-monitors', action='store_true',
+                               help='List all detected monitors and exit')
+    monitor_group.add_argument('--monitor-index', type=int,
+                               help='Specify which monitor to use (coordinates will be relative to this monitor)')
+
     # Movement options
     parser.add_argument('-d', '--delay', type=float, default=0,
                         help='Delay in seconds before moving the mouse (default: 0)')
@@ -953,17 +1280,6 @@ def main():
     sequence_group.add_argument('--sequence', type=str,
                                 help='JSON string or file path defining a sequence of actions to perform')
 
-    # Monitor options
-    monitor_group = parser.add_argument_group('Monitor options')
-    monitor_group.add_argument('--monitor', action='store_true',
-                               help='Monitor and display mouse position in real-time')
-    monitor_group.add_argument('--monitor-interval', type=float, default=0.1,
-                               help='Update interval for monitor in seconds (default: 0.1)')
-    monitor_group.add_argument('--monitor-duration', type=float,
-                               help='Duration to monitor in seconds (default: indefinite)')
-    monitor_group.add_argument('--no-monitor-clicks', action='store_true',
-                               help='Disable click detection in monitor mode')
-
     # Show resolution
     parser.add_argument('--show-resolution', action='store_true',
                         help='Show screen resolution and exit')
@@ -974,6 +1290,11 @@ def main():
     if args.show_resolution:
         width, height = get_screen_resolution()
         print(f"Screen resolution: {width}x{height}")
+        return
+
+    # List monitors and exit if requested
+    if args.list_monitors:
+        list_monitors()
         return
 
     # Monitor mode
@@ -999,7 +1320,8 @@ def main():
             'check_bounds': not args.ignore_bounds,
             'smooth': args.smooth or args.global_smooth,
             'smooth_duration': args.duration if args.duration != 1.0 else args.global_duration,
-            'smooth_steps': args.steps if args.steps != 100 else args.global_steps
+            'smooth_steps': args.steps if args.steps != 100 else args.global_steps,
+            'monitor_index': args.monitor_index
         })
 
         # Add global delay if specified
