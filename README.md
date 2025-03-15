@@ -1,6 +1,6 @@
 # a\_
 
-A simple Python utility to move the mouse cursor to specified coordinates using command line arguments.
+A simple Python utility to move the mouse cursor to specified coordinates and perform mouse actions using command line arguments.
 
 ## Installation
 
@@ -53,7 +53,9 @@ A simple Python utility to move the mouse cursor to specified coordinates using 
 
 ## Usage
 
-Basic usage (with virtual environment activated):
+### Basic Usage
+
+Move the mouse to specified coordinates:
 
 ```
 python a_.py X Y
@@ -72,7 +74,141 @@ python a_.py 500 300
 
 This will move the mouse cursor to the position with X=500 and Y=300.
 
-### Optional Arguments
+### Mouse Clicks
+
+You can add mouse clicks after the movement by adding click options:
+
+```
+python a_.py X Y --left-click    # Left mouse button click
+python a_.py X Y --right-click   # Right mouse button click
+```
+
+#### Multiple Clicks
+
+Perform multiple clicks with a specified interval:
+
+```
+python a_.py X Y --left-click --click-count 3 --click-interval 0.2
+```
+
+This will perform 3 left clicks with a 0.2 second interval between each click.
+
+#### Double-Click
+
+For double-clicks:
+
+```
+python a_.py X Y --left-click --double
+```
+
+The `--double` flag overrides the `--click-count` parameter.
+
+#### Click Delay
+
+Add a delay after clicking:
+
+```
+python a_.py X Y --left-click --click-delay 1.5
+```
+
+Examples:
+
+```
+# Move to (500, 300) and left-click
+python a_.py 500 300 --left-click
+
+# Move to (800, 400) and right-click
+python a_.py 800 400 --right-click
+
+# Move to (500, 300) and double left-click
+python a_.py 500 300 --left-click --double
+
+# Move to (800, 400), right-click, and wait 2 seconds after clicking
+python a_.py 800 400 --right-click --click-delay 2
+
+# Move to (500, 300) and perform 5 left clicks with 0.3s interval
+python a_.py 500 300 --left-click --click-count 5 --click-interval 0.3
+```
+
+### Drag Operations
+
+You can perform drag operations by specifying start and end coordinates:
+
+```
+python a_.py X Y --drag-to-x DX --drag-to-y DY
+```
+
+Where:
+
+- `X` and `Y` are the starting coordinates
+- `DX` and `DY` are the ending coordinates
+
+#### Selecting the Drag Button
+
+By default, the left mouse button is used for dragging. You can specify which button to use:
+
+```
+python a_.py X Y --drag-to-x DX --drag-to-y DY                # Left button drag (default)
+python a_.py X Y --left-click --drag-to-x DX --drag-to-y DY   # Left button drag (explicit)
+python a_.py X Y --right-click --drag-to-x DX --drag-to-y DY  # Right button drag
+```
+
+The `--left-click` or `--right-click` flag determines which button is used for both dragging and any associated clicks.
+
+#### Smooth Dragging
+
+Drag with smooth movement (default) or disable it:
+
+```
+python a_.py X Y --drag-to-x DX --drag-to-y DY                # Smooth drag (default)
+python a_.py X Y --drag-to-x DX --drag-to-y DY --no-drag-smooth  # Direct drag
+```
+
+#### Click and Drag Combinations
+
+You can combine clicks with drag operations:
+
+```
+# Click before starting the drag operation
+python a_.py X Y --drag-to-x DX --drag-to-y DY --click-before-drag
+
+# Click after completing the drag operation
+python a_.py X Y --drag-to-x DX --drag-to-y DY --click-after-drag
+
+# Click both before and after the drag operation
+python a_.py X Y --drag-to-x DX --drag-to-y DY --click-before-drag --click-after-drag
+```
+
+These options use the same button as specified by `--left-click` or `--right-click` (left button by default). All click options (count, interval, double, delay) apply to these clicks as well.
+
+Examples:
+
+```
+# Drag from (100, 100) to (300, 300) with left button (default)
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300
+
+# Drag from (200, 200) to (400, 400) with right button
+python a_.py 200 200 --right-click --drag-to-x 400 --drag-to-y 400
+
+# Drag from (100, 100) to (300, 300) without smooth movement
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --no-drag-smooth
+
+# Left-click, then drag from (100, 100) to (300, 300) with left button
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag
+
+# Drag from (100, 100) to (300, 300) with left button, then left-click
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-after-drag
+
+# Double-click with left button, drag from (100, 100) to (300, 300), then click again
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double
+
+# Double-click with right button, drag from (100, 100) to (300, 300) with right button, then right-click again
+python a_.py 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double --right-click
+```
+
+### Movement Options
+
+#### Delay Before Movement
 
 You can add a delay before the mouse movement:
 
@@ -94,7 +230,7 @@ python a_.py 500 300 -d 2
 
 This will wait for 2 seconds and then move the mouse cursor to the position with X=500 and Y=300.
 
-### Smooth Movement
+#### Smooth Movement
 
 You can enable smooth movement to make the mouse transition gradually to the target coordinates:
 
@@ -117,9 +253,16 @@ python a_.py 500 300 --smooth --duration 2.5 --steps 150
 
 This will move the mouse smoothly to position (500, 300) over 2.5 seconds using 150 intermediate steps.
 
-### Screen Resolution Awareness
+Combine smooth movement with clicks or drags:
 
-The script now detects your screen resolution and warns you if the coordinates are outside the screen boundaries. You can:
+```
+python a_.py 500 300 --smooth --left-click
+python a_.py 100 100 --smooth --drag-to-x 300 --drag-to-y 300
+```
+
+#### Screen Resolution Awareness
+
+The script detects your screen resolution and warns you if the coordinates are outside the screen boundaries. You can:
 
 - View your screen resolution:
 
@@ -137,20 +280,32 @@ The script now detects your screen resolution and warns you if the coordinates a
 For convenience, you can use the provided run script which automatically handles the virtual environment:
 
 ```
-./run.sh X Y
+./run.sh X Y [options]
 ```
 
-This will:
-
-1. Check if the virtual environment exists and create it if needed
-2. Activate the virtual environment
-3. Run the script with your arguments
-4. Deactivate the virtual environment when done
-
-All options work with the run script as well:
+Examples:
 
 ```
-./run.sh X Y --smooth --duration 2.0 --steps 200
+# Move the mouse
+./run.sh 500 300
+
+# Move and click
+./run.sh 500 300 --left-click
+
+# Move smoothly and right-click
+./run.sh 500 300 --smooth --right-click
+
+# Perform multiple clicks
+./run.sh 500 300 --left-click --click-count 3 --click-interval 0.2
+
+# Perform a drag operation
+./run.sh 100 100 --drag-to-x 300 --drag-to-y 300
+
+# Click, then drag, then click again
+./run.sh 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag
+
+# Double-click with right button, drag with right button, then right-click again
+./run.sh 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double --right-click
 ```
 
 ## Making the Script Executable (Linux/macOS)
@@ -159,7 +314,7 @@ You can make the script executable to run it directly:
 
 ```
 chmod +x a_.py
-./a_.py X Y
+./a_.py X Y [options]
 ```
 
 ## Requirements

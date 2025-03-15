@@ -10,7 +10,7 @@ import sys
 import time
 import argparse
 import math
-from pynput.mouse import Controller
+from pynput.mouse import Controller, Button
 import subprocess
 import re
 import platform
@@ -132,9 +132,133 @@ def smooth_move(start_x, start_y, end_x, end_y, duration=1.0, steps=100):
         f"Smooth movement complete. Current mouse position: {mouse.position}")
 
 
-def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100):
+def perform_click(button='left', count=1, interval=0.1, double=False, delay_after=0):
     """
-    Move the mouse to the specified coordinates.
+    Perform mouse clicks at the current position.
+
+    Args:
+        button (str): Which button to click ('left' or 'right')
+        count (int): Number of clicks to perform
+        interval (float): Time between clicks in seconds
+        double (bool): Whether to perform double-clicks (overrides count)
+        delay_after (float): Delay in seconds after all clicks are done
+    """
+    mouse = Controller()
+
+    # Map string button name to pynput Button
+    button_map = {
+        'left': Button.left,
+        'right': Button.right
+    }
+
+    if button not in button_map:
+        print(f"Invalid button: {button}. Using left button instead.")
+        button = 'left'
+
+    mouse_button = button_map[button]
+
+    if double:
+        print(f"Performing double {button} click at {mouse.position}")
+        mouse.click(mouse_button, 2)
+    else:
+        if count == 1:
+            print(f"Performing {button} click at {mouse.position}")
+            mouse.click(mouse_button)
+        else:
+            print(
+                f"Performing {count} {button} clicks at {mouse.position} with {interval}s interval")
+            for i in range(count):
+                mouse.click(mouse_button)
+                if i < count - 1:  # Don't sleep after the last click
+                    time.sleep(interval)
+
+    if delay_after > 0:
+        print(f"Waiting for {delay_after} seconds after clicking...")
+        time.sleep(delay_after)
+
+
+def perform_drag(start_x, start_y, end_x, end_y, button='left', smooth=True, duration=1.0, steps=100, delay_after=0,
+                 click_before=False, click_after=False, click_button=None, click_count=1, click_interval=0.1,
+                 double_click=False, click_delay=0):
+    """
+    Perform a drag operation from start to end coordinates with optional clicks before or after.
+
+    Args:
+        start_x (int): Starting X coordinate
+        start_y (int): Starting Y coordinate
+        end_x (int): Ending X coordinate
+        end_y (int): Ending Y coordinate
+        button (str): Which button to use for dragging ('left' or 'right')
+        smooth (bool): Whether to move smoothly during the drag
+        duration (float): Duration of the drag in seconds
+        steps (int): Number of steps for smooth movement
+        delay_after (float): Delay in seconds after dragging
+        click_before (bool): Whether to click before dragging
+        click_after (bool): Whether to click after dragging
+        click_button (str): Which button to use for clicking ('left' or 'right')
+        click_count (int): Number of clicks to perform
+        click_interval (float): Time between clicks in seconds
+        double_click (bool): Whether to perform a double-click
+        click_delay (float): Delay in seconds after clicking
+    """
+    mouse = Controller()
+
+    # Map string button name to pynput Button
+    button_map = {
+        'left': Button.left,
+        'right': Button.right
+    }
+
+    if button not in button_map:
+        print(f"Invalid button: {button}. Using left button instead.")
+        button = 'left'
+
+    mouse_button = button_map[button]
+
+    # Move to start position
+    mouse.position = (start_x, start_y)
+    print(f"Positioned at start coordinates: ({start_x}, {start_y})")
+
+    # Perform click before dragging if requested
+    if click_before:
+        click_btn = click_button or button  # Use specified click button or drag button
+        print(f"Performing click before drag...")
+        perform_click(click_btn, click_count, click_interval,
+                      double_click, click_delay)
+
+    # Press and hold the button
+    mouse.press(mouse_button)
+    print(f"Pressed {button} button, starting drag operation")
+
+    # Move to end position (smoothly or directly)
+    if smooth:
+        smooth_move(start_x, start_y, end_x, end_y, duration, steps)
+    else:
+        mouse.position = (end_x, end_y)
+        print(f"Moved to end coordinates: ({end_x}, {end_y})")
+
+    # Release the button
+    mouse.release(mouse_button)
+    print(f"Released {button} button, drag operation complete")
+
+    # Perform click after dragging if requested
+    if click_after:
+        click_btn = click_button or button  # Use specified click button or drag button
+        print(f"Performing click after drag...")
+        perform_click(click_btn, click_count, click_interval,
+                      double_click, click_delay)
+
+    if delay_after > 0:
+        print(f"Waiting for {delay_after} seconds after dragging...")
+        time.sleep(delay_after)
+
+
+def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100,
+               click=None, click_count=1, click_interval=0.1, double_click=False, click_delay=0,
+               drag_to_x=None, drag_to_y=None, drag_smooth=True,
+               click_before_drag=False, click_after_drag=False):
+    """
+    Move the mouse to the specified coordinates and optionally click or drag.
 
     Args:
         x (int): X coordinate
@@ -144,6 +268,16 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         smooth (bool): Whether to move the mouse smoothly to the target
         smooth_duration (float): Duration of smooth movement in seconds
         smooth_steps (int): Number of steps for smooth movement
+        click (str): Which button to click after moving ('left', 'right', or None for no click)
+        click_count (int): Number of clicks to perform
+        click_interval (float): Time between clicks in seconds
+        double_click (bool): Whether to perform a double-click
+        click_delay (float): Delay in seconds after clicking
+        drag_to_x (int): X coordinate to drag to (None for no drag)
+        drag_to_y (int): Y coordinate to drag to (None for no drag)
+        drag_smooth (bool): Whether to move smoothly during the drag
+        click_before_drag (bool): Whether to click before dragging
+        click_after_drag (bool): Whether to click after dragging
     """
     mouse = Controller()
 
@@ -151,6 +285,7 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         screen_width, screen_height = get_screen_resolution()
         print(f"Detected screen resolution: {screen_width}x{screen_height}")
 
+        # Check initial coordinates
         if x < 0 or x >= screen_width or y < 0 or y >= screen_height:
             print(
                 f"Warning: Coordinates ({x}, {y}) are outside screen bounds ({screen_width}x{screen_height})")
@@ -160,10 +295,22 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
                 print("Operation cancelled.")
                 return
 
+        # Check drag coordinates if applicable
+        if drag_to_x is not None and drag_to_y is not None:
+            if drag_to_x < 0 or drag_to_x >= screen_width or drag_to_y < 0 or drag_to_y >= screen_height:
+                print(
+                    f"Warning: Drag coordinates ({drag_to_x}, {drag_to_y}) are outside screen bounds ({screen_width}x{screen_height})")
+                print("Do you want to continue anyway? (y/n)")
+                response = input().lower()
+                if response != 'y' and response != 'yes':
+                    print("Operation cancelled.")
+                    return
+
     if delay > 0:
         print(f"Waiting for {delay} seconds before moving mouse...")
         time.sleep(delay)
 
+    # Move to the initial position
     if smooth:
         # Get current mouse position as starting point
         current_pos = mouse.position
@@ -174,36 +321,80 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         mouse.position = (x, y)
         print(f"Current mouse position: {mouse.position}")
 
+    # Perform drag if coordinates are provided
+    if drag_to_x is not None and drag_to_y is not None:
+        perform_drag(x, y, drag_to_x, drag_to_y,
+                     button=click or 'left',  # Use click button or default to left
+                     smooth=drag_smooth,
+                     duration=smooth_duration,
+                     steps=smooth_steps,
+                     delay_after=click_delay,
+                     click_before=click_before_drag,
+                     click_after=click_after_drag,
+                     click_button=click,
+                     click_count=click_count,
+                     click_interval=click_interval,
+                     double_click=double_click,
+                     click_delay=click_delay)
+    # Otherwise perform click if requested
+    elif click:
+        perform_click(click, click_count, click_interval,
+                      double_click, click_delay)
+
 
 def main():
     """Parse command line arguments and move the mouse accordingly."""
     parser = argparse.ArgumentParser(
-        description='Move the mouse to specified coordinates.')
+        description='Move the mouse to specified coordinates and optionally click or drag.')
 
-    # Create a mutually exclusive group for the main commands
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--show-resolution', action='store_true',
-                       help='Show screen resolution and exit')
-
-    # Only require x and y if we're not showing resolution
     parser.add_argument('x', type=int, nargs='?',
                         help='X coordinate')
     parser.add_argument('y', type=int, nargs='?',
                         help='Y coordinate')
 
-    # Optional arguments
+    # Movement options
     parser.add_argument('-d', '--delay', type=float, default=0,
                         help='Delay in seconds before moving the mouse (default: 0)')
     parser.add_argument('--ignore-bounds', action='store_true',
                         help='Ignore screen boundary checks')
-
-    # Smooth movement options
     parser.add_argument('--smooth', action='store_true',
                         help='Move the mouse smoothly to the target coordinates')
     parser.add_argument('--duration', type=float, default=1.0,
                         help='Duration of smooth movement in seconds (default: 1.0)')
     parser.add_argument('--steps', type=int, default=100,
                         help='Number of steps for smooth movement (default: 100)')
+
+    # Click options
+    click_group = parser.add_argument_group('Click options')
+    click_group.add_argument('--left-click', action='store_true',
+                             help='Perform a left click after moving the mouse')
+    click_group.add_argument('--right-click', action='store_true',
+                             help='Perform a right click after moving the mouse')
+    click_group.add_argument('--click-count', type=int, default=1,
+                             help='Number of clicks to perform (default: 1)')
+    click_group.add_argument('--click-interval', type=float, default=0.1,
+                             help='Time between clicks in seconds (default: 0.1)')
+    click_group.add_argument('--double', action='store_true',
+                             help='Perform a double-click (overrides click-count)')
+    click_group.add_argument('--click-delay', type=float, default=0,
+                             help='Delay in seconds after clicking (default: 0)')
+
+    # Drag options
+    drag_group = parser.add_argument_group('Drag options')
+    drag_group.add_argument('--drag-to-x', type=int,
+                            help='X coordinate to drag to')
+    drag_group.add_argument('--drag-to-y', type=int,
+                            help='Y coordinate to drag to')
+    drag_group.add_argument('--no-drag-smooth', action='store_true',
+                            help='Disable smooth movement during drag')
+    drag_group.add_argument('--click-before-drag', action='store_true',
+                            help='Perform a click before starting the drag operation')
+    drag_group.add_argument('--click-after-drag', action='store_true',
+                            help='Perform a click after completing the drag operation')
+
+    # Show resolution
+    parser.add_argument('--show-resolution', action='store_true',
+                        help='Show screen resolution and exit')
 
     args = parser.parse_args()
 
@@ -213,12 +404,28 @@ def main():
         print(f"Screen resolution: {width}x{height}")
         return
 
-    # If not showing resolution, we need both x and y coordinates
+    # If no coordinates are provided, show help
     if args.x is None or args.y is None:
         parser.error(
             "the following arguments are required: x, y (unless --show-resolution is specified)")
 
-    # Move the mouse
+    # Determine which click to perform (if any)
+    click = None
+    if args.left_click:
+        click = 'left'
+    elif args.right_click:
+        click = 'right'
+
+    # Check if drag coordinates are provided
+    drag_to_x = args.drag_to_x
+    drag_to_y = args.drag_to_y
+
+    # Both drag coordinates must be provided or none
+    if (drag_to_x is None) != (drag_to_y is None):
+        parser.error(
+            "Both --drag-to-x and --drag-to-y must be provided for drag operation")
+
+    # Move the mouse (and click/drag if requested)
     move_mouse(
         args.x,
         args.y,
@@ -226,7 +433,17 @@ def main():
         not args.ignore_bounds,
         args.smooth,
         args.duration,
-        args.steps
+        args.steps,
+        click,
+        args.click_count,
+        args.click_interval,
+        args.double,
+        args.click_delay,
+        drag_to_x,
+        drag_to_y,
+        not args.no_drag_smooth,
+        args.click_before_drag,
+        args.click_after_drag
     )
 
 
