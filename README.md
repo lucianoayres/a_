@@ -854,3 +854,102 @@ chmod +x a_.py
 
 - Python 3.6 or higher
 - pynput 1.7.6
+- wmctrl (for window selection feature on Linux)
+
+### Window Selection
+
+The utility supports selecting and activating specific windows before performing mouse actions. This is particularly useful when you need to ensure actions are performed in the correct window.
+
+#### Dependencies
+
+On Linux systems, this feature requires `wmctrl`:
+
+```bash
+# Install wmctrl on Ubuntu/Debian
+sudo apt-get install wmctrl
+
+# Install wmctrl on Fedora
+sudo dnf install wmctrl
+
+# Install wmctrl on Arch Linux
+sudo pacman -S wmctrl
+```
+
+#### Listing Window Titles
+
+To see all available window titles (useful for the `--window-title` parameter):
+
+```bash
+wmctrl -l
+```
+
+This will show all open windows with their IDs and titles. Use these titles with the window selection options.
+
+#### Basic Usage
+
+```bash
+# Move mouse to coordinates in a specific window
+python a_.py --window-title "Google Chrome" --move 500 300
+
+# Click in a specific window
+python a_.py --window-title "Firefox" --move 500 300 --click
+
+# Type text in a specific window
+python a_.py --window-title "Notepad" --type "Hello world"
+```
+
+#### Window Selection Options
+
+- `--window-title TITLE`: Select window by title (exact or partial match)
+- `--window-process NAME`: Select window by process name
+- `--window-wait SECONDS`: Wait time after window activation (default: 1.0)
+- `--no-window-required`: Continue even if window is not found
+- `--window-retry COUNT`: Number of times to retry finding window (default: 3)
+
+#### Examples
+
+```bash
+# Move to coordinates in Chrome window with smooth movement
+python a_.py --window-title "Chrome" --move 500 300 --smooth
+
+# Click in Firefox window after waiting 2 seconds
+python a_.py --window-title "Firefox" --window-wait 2.0 --move 500 300 --click
+
+# Type in terminal window
+python a_.py --window-process "gnome-terminal" --type "ls -l"
+
+# Complex sequence in a specific window
+python a_.py --window-title "Notepad" --move 100 100 --click --type "Hello" --key enter
+
+# Try multiple times to find window
+python a_.py --window-title "Firefox" --window-retry 5 --move 500 300
+
+# Continue even if window not found
+python a_.py --window-title "Firefox" --no-window-required --move 500 300
+```
+
+#### Using with JSON Sequences
+
+When using the `--sequence` parameter with JSON, you can include window selection in your sequence:
+
+```json
+{
+  "window": {
+    "title": "Google Chrome",
+    "wait": 1.0,
+    "retry": 3
+  },
+  "actions": [
+    {
+      "type": "move",
+      "x": 500,
+      "y": 300,
+      "smooth": true
+    },
+    {
+      "type": "click",
+      "button": "left"
+    }
+  ]
+}
+```

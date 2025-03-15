@@ -20,6 +20,278 @@ import os
 import shlex
 
 
+def find_window_linux(title=None, process=None):
+    """
+    Find a window on Linux using wmctrl.
+
+    Args:
+        title (str): Window title to search for
+        process (str): Process name to search for
+
+    Returns:
+        tuple: (window_id, window_title) or (None, None) if not found
+    """
+    try:
+        # Check if wmctrl is installed
+        subprocess.run(['which', 'wmctrl'], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        print("Error: wmctrl is not installed. Please install it using:")
+        print("sudo apt-get install wmctrl")
+        return None, None
+
+    try:
+        # Get list of windows
+        output = subprocess.check_output(['wmctrl', '-l', '-p'], text=True)
+
+        for line in output.split('\n'):
+            if not line.strip():
+                continue
+
+            parts = line.split(None, 4)
+            if len(parts) < 4:
+                continue
+
+            window_id, desktop, pid, *rest = parts
+            window_title = rest[-1] if rest else ""
+
+            # If process name is specified, check if it matches
+            if process:
+                try:
+                    proc_name = subprocess.check_output(
+                        ['ps', '-p', pid, '-o', 'comm='], text=True).strip()
+                    if process.lower() not in proc_name.lower():
+                        continue
+                except subprocess.CalledProcessError:
+                    continue
+
+            # If title is specified, check if it matches
+            if title:
+                if title.lower() not in window_title.lower():
+                    continue
+
+            return window_id, window_title
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error finding window: {e}")
+
+    return None, None
+
+
+def find_window_macos(title=None, process=None):
+    """
+    Find a window on macOS using osascript.
+
+    Args:
+        title (str): Window title to search for
+        process (str): Process name to search for
+
+    Returns:
+        tuple: (window_id, window_title) or (None, None) if not found
+    """
+    try:
+        if process:
+            script = f'''
+                tell application "System Events"
+                    set frontApp to first application process whose name contains "{process}"
+                    return {{name of frontApp, frontApp}}
+                end tell
+            '''
+        elif title:
+            script = f'''
+                tell application "System Events"
+                    set targetWindow to first window whose name contains "{title}"
+                    set frontApp to first application process whose window 1 is targetWindow
+                    return {{name of frontApp, frontApp}}
+                end tell
+            '''
+        else:
+            return None, None
+
+        result = subprocess.check_output(
+            ['osascript', '-e', script], text=True)
+        if result:
+            return "macos_window", result.strip()  # macOS doesn't use window IDs like X11
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error finding window: {e}")
+
+    return None, None
+
+
+def find_window_windows(title=None, process=None):
+    """
+    Find a window on Windows using PowerShell.
+
+    Args:
+        title (str): Window title to search for
+        process (str): Process name to search for
+
+    Returns:
+        tuple: (window_id, window_title) or (None, None) if not found
+    """
+    try:
+        if process:
+            script = f'''
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Win32 {{
+                [DllImport("user32.dll")]
+                public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+                [DllImport("user32.dll")]
+                public static extern bool SetForegroundWindow(IntPtr hWnd);
+            }}
+"@
+
+            $process = Get-Process | Where-Object {{ $_.ProcessName -like "*{process}*" }} | Select-Object -First 1
+            if ($process) {{
+                $process.MainWindowTitle
+            }}
+            '''
+        elif title:
+            script = f'''
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Win32 {{
+                [DllImport("user32.dll")]
+                public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+                [DllImport("user32.dll")]
+                public static extern bool SetForegroundWindow(IntPtr hWnd);
+            }}
+"@
+
+            $windows = Get-Process | Where-Object {{$_.MainWindowTitle}} | Where-Object {{$_.MainWindowTitle -like "*{title}*"}}
+            if ($windows) {{
+                $windows[0].MainWindowTitle
+            }}
+            '''
+        else:
+            return None, None
+
+        result = subprocess.check_output(
+            ['powershell', '-Command', script], text=True)
+        if result:
+            return "windows_window", result.strip()
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error finding window: {e}")
+
+    return None, None
+
+
+def activate_window_linux(window_id):
+    """Activate a window on Linux using wmctrl."""
+    try:
+        subprocess.run(['wmctrl', '-i', '-a', window_id], check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error activating window: {e}")
+        return False
+
+
+def activate_window_macos(window_info):
+    """Activate a window on macOS using osascript."""
+    try:
+        script = f'''
+            tell application "{window_info}"
+                activate
+            end tell
+        '''
+        subprocess.run(['osascript', '-e', script], check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error activating window: {e}")
+        return False
+
+
+def activate_window_windows(window_title):
+    """Activate a window on Windows using PowerShell."""
+    try:
+        script = f'''
+        Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class Win32 {{
+            [DllImport("user32.dll")]
+            public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+            [DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
+        }}
+"@
+
+        $window = Get-Process | Where-Object {{$_.MainWindowTitle -eq "{window_title}"}} | Select-Object -First 1
+        if ($window) {{
+            $hwnd = $window.MainWindowHandle
+            [Win32]::SetForegroundWindow($hwnd)
+        }}
+        '''
+        subprocess.run(['powershell', '-Command', script], check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error activating window: {e}")
+        return False
+
+
+def find_and_activate_window(title=None, process=None, wait=1, required=True, retry_count=3):
+    """
+    Find and activate a window across different platforms.
+
+    Args:
+        title (str): Window title to search for
+        process (str): Process name to search for
+        wait (float): Time to wait after activating window
+        required (bool): Whether finding the window is required
+        retry_count (int): Number of times to retry finding the window
+
+    Returns:
+        bool: True if window was found and activated, False otherwise
+    """
+    system = platform.system()
+
+    for attempt in range(retry_count):
+        if attempt > 0:
+            print(
+                f"Retrying window search (attempt {attempt + 1}/{retry_count})...")
+            time.sleep(1)
+
+        window_id = None
+        window_title = None
+
+        if system == "Linux":
+            window_id, window_title = find_window_linux(title, process)
+            if window_id:
+                success = activate_window_linux(window_id)
+        elif system == "Darwin":  # macOS
+            window_id, window_title = find_window_macos(title, process)
+            if window_id:
+                success = activate_window_macos(window_title)
+        elif system == "Windows":
+            window_id, window_title = find_window_windows(title, process)
+            if window_id:
+                success = activate_window_windows(window_title)
+        else:
+            print(f"Unsupported operating system: {system}")
+            return False
+
+        if window_id:
+            print(f"Found window: {window_title}")
+            if wait > 0:
+                print(f"Waiting {wait} seconds for window to be ready...")
+                time.sleep(wait)
+            return True
+
+    if required:
+        search_term = f"title '{title}'" if title else f"process '{process}'"
+        print(f"Error: Could not find window with {search_term}")
+        sys.exit(1)
+
+    return False
+
+
 def get_all_monitors():
     """
     Get information about all connected monitors.
@@ -1199,6 +1471,19 @@ def main():
     monitor_group.add_argument('--monitor-index', type=int,
                                help='Specify which monitor to use (coordinates will be relative to this monitor)')
 
+    # Window selection options
+    window_group = parser.add_argument_group('Window selection options')
+    window_group.add_argument('--window-title',
+                              help='Select window by title (exact or partial match)')
+    window_group.add_argument('--window-process',
+                              help='Select window by process name')
+    window_group.add_argument('--window-wait', type=float, default=1.0,
+                              help='Wait time in seconds after window activation (default: 1.0)')
+    window_group.add_argument('--no-window-required', action='store_true',
+                              help='Continue even if window is not found')
+    window_group.add_argument('--window-retry', type=int, default=3,
+                              help='Number of times to retry finding window (default: 3)')
+
     # Movement options
     parser.add_argument('-d', '--delay', type=float, default=0,
                         help='Delay in seconds before moving the mouse (default: 0)')
@@ -1305,6 +1590,16 @@ def main():
             duration=args.monitor_duration
         )
         return
+
+    # Activate target window if specified
+    if args.window_title or args.window_process:
+        find_and_activate_window(
+            title=args.window_title,
+            process=args.window_process,
+            wait=args.window_wait,
+            required=not args.no_window_required,
+            retry_count=args.window_retry
+        )
 
     # Build action sequence from command-line arguments
     actions = []
