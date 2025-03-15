@@ -74,6 +74,50 @@ python a_.py 500 300
 
 This will move the mouse cursor to the position with X=500 and Y=300.
 
+### Mouse Position Monitor
+
+You can monitor the real-time position of your mouse cursor on the screen:
+
+```
+python a_.py --monitor
+```
+
+This will display a continuously updating table showing:
+
+- Current time elapsed
+- X and Y coordinates
+- Number of left and right clicks
+
+The monitor can be stopped by pressing Ctrl+C.
+
+#### Monitor Options
+
+Customize the monitor behavior with these options:
+
+```
+# Set update interval to 0.5 seconds
+python a_.py --monitor --monitor-interval 0.5
+
+# Monitor for a specific duration (10 seconds)
+python a_.py --monitor --monitor-duration 10
+
+# Disable click detection
+python a_.py --monitor --no-monitor-clicks
+```
+
+Examples:
+
+```
+# Basic monitoring
+./run.sh --monitor
+
+# Monitor with 0.2s update interval for 30 seconds
+./run.sh --monitor --monitor-interval 0.2 --monitor-duration 30
+
+# Monitor position only (no click detection)
+./run.sh --monitor --no-monitor-clicks
+```
+
 ### Mouse Clicks
 
 You can add mouse clicks after the movement by adding click options:
@@ -306,6 +350,9 @@ Examples:
 
 # Double-click with right button, drag with right button, then right-click again
 ./run.sh 100 100 --drag-to-x 300 --drag-to-y 300 --click-before-drag --click-after-drag --double --right-click
+
+# Monitor mouse position
+./run.sh --monitor
 ```
 
 ## Making the Script Executable (Linux/macOS)

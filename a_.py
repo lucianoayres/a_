@@ -10,7 +10,7 @@ import sys
 import time
 import argparse
 import math
-from pynput.mouse import Controller, Button
+from pynput.mouse import Controller, Button, Listener
 import subprocess
 import re
 import platform
@@ -83,6 +83,68 @@ def get_screen_resolution():
 
     # Last resort default
     return (1920, 1080)
+
+
+def monitor_mouse_position(update_interval=0.1, show_clicks=True, duration=None):
+    """
+    Monitor and display the current mouse position in real-time.
+
+    Args:
+        update_interval (float): Time between position updates in seconds
+        show_clicks (bool): Whether to show mouse click events
+        duration (float): How long to monitor in seconds (None for indefinite)
+    """
+    mouse = Controller()
+    start_time = time.time()
+    click_count = {'left': 0, 'right': 0}
+
+    def on_click(x, y, button, pressed):
+        if pressed:
+            btn_name = 'left' if button == Button.left else 'right' if button == Button.right else 'middle'
+            click_count[btn_name if btn_name in click_count else 'other'] = click_count.get(
+                btn_name, 0) + 1
+            print(f"Mouse {btn_name} button clicked at ({x}, {y})")
+
+    # Start the listener if showing clicks
+    listener = None
+    if show_clicks:
+        listener = Listener(on_click=on_click)
+        listener.start()
+
+    try:
+        print("\nMonitoring mouse position. Press Ctrl+C to stop.")
+        print("=" * 50)
+        print(
+            f"{'Time (s)':10} | {'X':6} | {'Y':6} | {'Left Clicks':12} | {'Right Clicks':12}")
+        print("-" * 50)
+
+        while True:
+            current_time = time.time() - start_time
+            x, y = mouse.position
+
+            # Format and print the current position
+            print(f"{current_time:10.2f} | {x:6} | {y:6} | {click_count.get('left', 0):12} | {click_count.get('right', 0):12}", end='\r')
+
+            # Check if duration has elapsed
+            if duration is not None and current_time >= duration:
+                break
+
+            time.sleep(update_interval)
+
+    except KeyboardInterrupt:
+        print("\n\nMonitoring stopped by user.")
+    finally:
+        if listener:
+            listener.stop()
+
+        # Print summary
+        end_time = time.time() - start_time
+        print("\n" + "=" * 50)
+        print(f"Monitoring session summary:")
+        print(f"- Duration: {end_time:.2f} seconds")
+        print(f"- Left clicks: {click_count.get('left', 0)}")
+        print(f"- Right clicks: {click_count.get('right', 0)}")
+        print("=" * 50)
 
 
 def smooth_move(start_x, start_y, end_x, end_y, duration=1.0, steps=100):
@@ -392,6 +454,17 @@ def main():
     drag_group.add_argument('--click-after-drag', action='store_true',
                             help='Perform a click after completing the drag operation')
 
+    # Monitor options
+    monitor_group = parser.add_argument_group('Monitor options')
+    monitor_group.add_argument('--monitor', action='store_true',
+                               help='Monitor and display mouse position in real-time')
+    monitor_group.add_argument('--monitor-interval', type=float, default=0.1,
+                               help='Update interval for monitor in seconds (default: 0.1)')
+    monitor_group.add_argument('--monitor-duration', type=float,
+                               help='Duration to monitor in seconds (default: indefinite)')
+    monitor_group.add_argument('--no-monitor-clicks', action='store_true',
+                               help='Disable click detection in monitor mode')
+
     # Show resolution
     parser.add_argument('--show-resolution', action='store_true',
                         help='Show screen resolution and exit')
@@ -404,10 +477,19 @@ def main():
         print(f"Screen resolution: {width}x{height}")
         return
 
-    # If no coordinates are provided, show help
+    # Monitor mode
+    if args.monitor:
+        monitor_mouse_position(
+            update_interval=args.monitor_interval,
+            show_clicks=not args.no_monitor_clicks,
+            duration=args.monitor_duration
+        )
+        return
+
+    # If no coordinates are provided and not in monitor mode, show help
     if args.x is None or args.y is None:
         parser.error(
-            "the following arguments are required: x, y (unless --show-resolution is specified)")
+            "the following arguments are required: x, y (unless --show-resolution or --monitor is specified)")
 
     # Determine which click to perform (if any)
     click = None
