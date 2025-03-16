@@ -275,33 +275,68 @@ python a_.py --move 500 300 --wait 1 --click --wait 2 --key enter
 
 ### Scroll Examples
 
-You can scroll up or down at the current mouse position:
+You can scroll up or down at the current mouse position. The scroll functionality is available in all modes:
 
-```
-# Scroll up by 10 units
-python a_.py --scroll 10
+1. **Command Line Mode**:
 
-# Scroll down by 5 units
-python a_.py --scroll -5
+```bash
+# Basic scroll
+python a_.py --scroll 10  # Scroll up
+python a_.py --scroll -5  # Scroll down
 
 # Scroll with custom parameters
-python a_.py --scroll 20 --scroll-steps 20 --scroll-interval 0.02
+python a_.py --scroll 20 --scroll-steps 20 --scroll-interval 0.02 --scroll-delay 1.0
 
-# Move to a position and then scroll
+# Combined with other actions
 python a_.py --move 500 300 --scroll 10
-
-# Move, click, and then scroll
 python a_.py --move 500 300 --click --scroll 10
 ```
 
-#### Scroll Options
+2. **Simple Sequence Mode**:
 
-Customize the scroll behavior with these options:
+```bash
+# Scroll in a sequence
+python a_.py --sequence "move 500 300; scroll 10; wait 1; scroll -5"
+
+# Scroll with parameters
+python a_.py --sequence "scroll 20 --steps=20 --interval=0.02"
+```
+
+3. **JSON Sequence Mode**:
+
+```bash
+python a_.py --sequence '[
+  {"type": "move", "x": 500, "y": 300},
+  {"type": "scroll", "amount": 10, "steps": 20, "interval": 0.02},
+  {"type": "wait", "seconds": 1},
+  {"type": "scroll", "amount": -5}
+]'
+```
+
+4. **Record/Replay Mode**:
+   The scroll functionality is automatically captured when recording mouse actions and can be replayed later:
+
+```bash
+# Record actions including scrolling
+python a_.py --record actions.json
+
+# Replay recorded actions
+python a_.py --replay actions.json
+
+# Replay with repeat
+python a_.py --replay actions.json --replay-repeat 3
+```
+
+#### Scroll Parameters
+
+The scroll behavior can be customized with these parameters:
 
 - `--scroll AMOUNT`: Amount to scroll (positive for up, negative for down)
 - `--scroll-steps COUNT`: Number of steps to divide the scroll into (default: 10)
 - `--scroll-interval SECONDS`: Time between scroll steps in seconds (default: 0.01)
-- `--scroll-delay SECONDS`: Delay in seconds after scrolling (default: 0)
+- `--scroll-delay SECONDS`: Delay after scrolling completes (default: 0)
+
+These parameters work consistently across all modes (command line, sequence, and record/replay).
 
 ### Complex Sequence Examples
 
