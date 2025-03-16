@@ -924,7 +924,7 @@ def record_events(output_file, duration=None):
 
     Args:
         output_file (str): Path to save the recorded events
-        duration (float): How long to record in seconds (None for indefinite)
+        duration (float): How long to record in seconds (default: indefinite)
     """
     events = []
     start_time = time.time()
@@ -1219,7 +1219,15 @@ def record_events(output_file, duration=None):
 
             # Save to file
             with open(output_file, 'w') as f:
-                json.dump(events, f, indent=2)
+                # Save as a structured format that includes metadata
+                json.dump({
+                    'version': '1.0',
+                    'recorded_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'duration': end_time,
+                    'total_events': event_count,
+                    'repeat': 1,  # Default repeat count
+                    'actions': events
+                }, f, indent=2)
 
             print("\n" + "=" * 50)
             print("Recording summary:")
@@ -1228,16 +1236,26 @@ def record_events(output_file, duration=None):
             print("=" * 50)
 
 
-def replay_events(input_file):
+def replay_events(input_file, override_repeat=None):
     """
     Replay recorded events from a JSON file.
 
     Args:
         input_file (str): Path to the JSON file containing recorded events
+        override_repeat (int): Optional repeat count to override the file's repeat count
     """
     try:
         with open(input_file, 'r') as f:
-            events = json.load(f)
+            data = json.load(f)
+
+        # Handle both old format (list) and new format (object with metadata)
+        if isinstance(data, list):
+            events = data
+            repeat_count = override_repeat or 1
+        else:
+            events = data.get('actions', [])
+            repeat_count = override_repeat or data.get('repeat', 1)
+
     except FileNotFoundError:
         print(f"Error: File not found: {input_file}")
         return
@@ -1246,88 +1264,100 @@ def replay_events(input_file):
         return
 
     print(f"\nReplaying {len(events)} events from: {input_file}")
+    print(f"Repeat count: {repeat_count}")
     print("=" * 50)
     print("Press Ctrl+C to stop replay")
 
-    # Keep track of held keys
-    held_keys = {}
-    current_window = None
-
-    # Optimize delays for smoother playback
-    MAX_MOVEMENT_DELAY = 0.05  # Cap movement delays
-    CLICK_DELAY_FACTOR = 0.5   # Reduce click delays
-    KEY_DELAY_FACTOR = 0.75    # Reduce key press delays
-
     try:
-        for i, event in enumerate(events, 1):
-            # Get and adjust the delay based on event type
-            delay = event.get('delay', 0)
+        for rep in range(repeat_count):
+            if repeat_count > 1:
+                print(f"\nRepetition {rep + 1}/{repeat_count}")
+                print("-" * 50)
 
-            if event['type'] == 'move':
-                delay = min(delay, MAX_MOVEMENT_DELAY)
-            elif event['type'] == 'click':
-                delay *= CLICK_DELAY_FACTOR
-            elif event['type'] == 'key':
-                delay *= KEY_DELAY_FACTOR
+            # Keep track of held keys
+            held_keys = {}
+            current_window = None
 
-            # Wait the adjusted delay before any action
-            if delay > 0:
-                time.sleep(delay)
+            # Optimize delays for smoother playback
+            MAX_MOVEMENT_DELAY = 0.05  # Cap movement delays
+            CLICK_DELAY_FACTOR = 0.5   # Reduce click delays
+            KEY_DELAY_FACTOR = 0.75    # Reduce key press delays
 
-            print(f"Event {i}/{len(events)}: {event['type']}")
+            for i, event in enumerate(events, 1):
+                # Get and adjust the delay based on event type
+                delay = event.get('delay', 0)
 
-            if event['type'] == 'window':
-                # Try to find and activate the window
-                window_found = False
-                if 'process' in event:
-                    print(f"Activating window for process: {event['process']}")
-                    window_found = find_and_activate_window(
-                        process=event['process'], wait=1, required=False)
-                if not window_found and 'title' in event:
-                    print(f"Activating window with title: {event['title']}")
-                    window_found = find_and_activate_window(
-                        title=event['title'], wait=1, required=False)
-                if window_found:
-                    current_window = event
-                    print(
-                        f"Successfully activated window: {event.get('title', event.get('process', 'Unknown'))}")
-                else:
-                    print(
-                        f"Warning: Could not find window: {event.get('title', event.get('process', 'Unknown'))}")
+                if event['type'] == 'move':
+                    delay = min(delay, MAX_MOVEMENT_DELAY)
+                elif event['type'] == 'click':
+                    delay *= CLICK_DELAY_FACTOR
+                elif event['type'] == 'key':
+                    delay *= KEY_DELAY_FACTOR
 
-            elif event['type'] == 'hold_key':
-                key = event.get('key')
-                if key:
-                    held_keys[key] = hold_key(key)
-                    print(f"Holding {key} key...")
+                # Wait the adjusted delay before any action
+                if delay > 0:
+                    time.sleep(delay)
 
-            elif event['type'] == 'release_key':
-                key = event.get('key')
-                if key and key in held_keys:
-                    release_key(held_keys[key])
-                    del held_keys[key]
-                    print(f"Released {key} key")
+                print(f"Event {i}/{len(events)}: {event['type']}")
 
-            elif event['type'] == 'move':
-                move_mouse(
-                    event['x'],
-                    event['y'],
-                    smooth=event.get('smooth', False),
-                    smooth_duration=0.001  # Faster smooth movement
-                )
-            elif event['type'] == 'click':
-                perform_click(
-                    button=event.get('button', 'left'),
-                    count=event.get('count', 1)
-                )
-            elif event['type'] == 'scroll':
-                perform_scroll(
-                    amount=event['amount']
-                )
-            elif event['type'] == 'key':
-                perform_key_press(
-                    event['key']
-                )
+                if event['type'] == 'window':
+                    # Try to find and activate the window
+                    window_found = False
+                    if 'process' in event:
+                        print(
+                            f"Activating window for process: {event['process']}")
+                        window_found = find_and_activate_window(
+                            process=event['process'], wait=1, required=False)
+                    if not window_found and 'title' in event:
+                        print(
+                            f"Activating window with title: {event['title']}")
+                        window_found = find_and_activate_window(
+                            title=event['title'], wait=1, required=False)
+                    if window_found:
+                        current_window = event
+                        print(
+                            f"Successfully activated window: {event.get('title', event.get('process', 'Unknown'))}")
+                    else:
+                        print(
+                            f"Warning: Could not find window: {event.get('title', event.get('process', 'Unknown'))}")
+
+                elif event['type'] == 'hold_key':
+                    key = event.get('key')
+                    if key:
+                        held_keys[key] = hold_key(key)
+                        print(f"Holding {key} key...")
+
+                elif event['type'] == 'release_key':
+                    key = event.get('key')
+                    if key and key in held_keys:
+                        release_key(held_keys[key])
+                        del held_keys[key]
+                        print(f"Released {key} key")
+
+                elif event['type'] == 'move':
+                    move_mouse(
+                        event['x'],
+                        event['y'],
+                        smooth=event.get('smooth', False),
+                        smooth_duration=0.001  # Faster smooth movement
+                    )
+                elif event['type'] == 'click':
+                    perform_click(
+                        button=event.get('button', 'left'),
+                        count=event.get('count', 1)
+                    )
+                elif event['type'] == 'scroll':
+                    perform_scroll(
+                        amount=event['amount']
+                    )
+                elif event['type'] == 'key':
+                    perform_key_press(
+                        event['key']
+                    )
+
+                if rep < repeat_count - 1:
+                    print("\nWaiting 1 second before next repetition...")
+                    time.sleep(1)
 
     except KeyboardInterrupt:
         print("\nReplay stopped by user.")
@@ -1621,95 +1651,109 @@ def parse_simple_sequence(sequence_str):
         action_type = parts[0].lower()
         params = parts[1:]
 
+        # Handle repeat parameter for any action
+        repeat_count = 1
+        repeat_index = -1
+        for i, param in enumerate(params):
+            if param == '--repeat' and i + 1 < len(params):
+                try:
+                    repeat_count = int(params[i + 1])
+                    repeat_index = i
+                    break
+                except ValueError:
+                    print(
+                        f"Warning: Invalid repeat count '{params[i + 1]}', using 1")
+
+        # Remove repeat parameters from the list
+        if repeat_index >= 0:
+            params = params[:repeat_index] + params[repeat_index + 2:]
+
+        base_action = None
+
         if action_type == 'move':
             if len(params) >= 2:
-                action = {
+                base_action = {
                     'type': 'move',
                     'x': int(params[0]),
                     'y': int(params[1]),
                     'smooth': '--smooth' in params
                 }
-                actions.append(action)
 
         elif action_type == 'click':
-            action = {
+            base_action = {
                 'type': 'click',
                 'button': params[0] if params and params[0] in ['left', 'right'] else 'left',
                 'count': int(params[1]) if len(params) > 1 else 1
             }
-            actions.append(action)
 
         elif action_type == 'key':
             if params:
-                action = {
+                base_action = {
                     'type': 'key',
                     'key': params[0]
                 }
                 # Check for modifiers
                 if len(params) > 1:
-                    action['modifiers'] = [mod for mod in params[1:] if mod in
-                                           ['ctrl', 'control', 'alt', 'shift', 'cmd', 'command', 'win', 'windows']]
-                actions.append(action)
+                    base_action['modifiers'] = [mod for mod in params[1:] if mod in
+                                                ['ctrl', 'control', 'alt', 'shift', 'cmd', 'command', 'win', 'windows']]
 
         elif action_type == 'wait':
             if params:
-                action = {
+                base_action = {
                     'type': 'wait',
                     'seconds': float(params[0])
                 }
-                actions.append(action)
 
         elif action_type == 'drag':
             if len(params) >= 2:
-                action = {
+                base_action = {
                     'type': 'move',
                     'x': int(params[0]),
                     'y': int(params[1]),
                     'drag': True
                 }
-                actions.append(action)
 
         elif action_type == 'drag_from':
             if len(params) >= 4:
-                actions.extend([
-                    {
-                        'type': 'move',
-                        'x': int(params[0]),
-                        'y': int(params[1])
-                    },
-                    {
-                        'type': 'move',
-                        'x': int(params[2]),
-                        'y': int(params[3]),
-                        'drag': True
-                    }
-                ])
+                actions.extend([{
+                    'type': 'move',
+                    'x': int(params[0]),
+                    'y': int(params[1])
+                }] * repeat_count)
+                base_action = {
+                    'type': 'move',
+                    'x': int(params[2]),
+                    'y': int(params[3]),
+                    'drag': True
+                }
 
         elif action_type == 'type':
             if params:
-                action = {
+                base_action = {
                     'type': 'type',
                     'text': params[0]
                 }
                 # Check for interval parameter
                 for i, param in enumerate(params):
                     if param == '--interval' and i + 1 < len(params):
-                        action['interval'] = float(params[i + 1])
-                actions.append(action)
+                        base_action['interval'] = float(params[i + 1])
 
         elif action_type == 'scroll':
             if params:
-                action = {
+                base_action = {
                     'type': 'scroll',
                     'amount': int(params[0])
                 }
                 # Check for additional parameters
                 for i, param in enumerate(params):
                     if param == '--steps' and i + 1 < len(params):
-                        action['steps'] = int(params[i + 1])
+                        base_action['steps'] = int(params[i + 1])
                     elif param == '--interval' and i + 1 < len(params):
-                        action['interval'] = float(params[i + 1])
-                actions.append(action)
+                        base_action['interval'] = float(params[i + 1])
+
+        # Add the action repeat_count times if it was created
+        if base_action:
+            actions.extend([base_action] * repeat_count)
 
     return actions
 
@@ -1804,6 +1848,20 @@ def list_windows():
         print(f"Window listing is not supported on {system}")
 
 
+def repeat_sequence(sequence, repeat_count):
+    """
+    Repeat a sequence of actions multiple times.
+
+    Args:
+        sequence (list): List of action dictionaries to repeat
+        repeat_count (int): Number of times to repeat the sequence
+    """
+    for i in range(repeat_count):
+        print(f"\nRepetition {i + 1}/{repeat_count}")
+        print("=" * 50)
+        perform_sequence(sequence)
+
+
 def main():
     """Parse command line arguments and execute the appropriate action."""
     parser = argparse.ArgumentParser(
@@ -1817,6 +1875,8 @@ def main():
                               help='Duration to record in seconds (default: indefinite)')
     record_group.add_argument('--replay', nargs='?', const='recorded_actions.json', metavar='INPUT_FILE',
                               help='Replay recorded events from a file (default: recorded_actions.json)')
+    record_group.add_argument('--replay-repeat', type=int,
+                              help='Override the repeat count when replaying recorded events')
     record_group.add_argument('--sequence', type=str,
                               help='Execute a sequence of actions (simple syntax or JSON file)')
 
@@ -1834,13 +1894,20 @@ def main():
                               help='Default button for all click/drag actions (default: left)')
     global_group.add_argument('--global-interval', type=float, default=0.1,
                               help='Default interval for all multi-actions (default: 0.1)')
+    global_group.add_argument('--global-repeat', type=int, default=1,
+                              help='Number of times to repeat all actions (default: 1)')
     global_group.add_argument('--wait', type=float,
                               help='Wait for specified number of seconds')
+
+    # Add repeat option to each action group
+    action_repeat = {
+        'help': 'Number of times to repeat this action (default: 1)', 'type': int, 'default': 1}
 
     # Mouse movement options
     mouse_group = parser.add_argument_group('Mouse movement options')
     mouse_group.add_argument('--move', nargs=2, type=int, metavar=('X', 'Y'),
                              help='Move mouse to specified X,Y coordinates')
+    mouse_group.add_argument('--move-repeat', **action_repeat)
     mouse_group.add_argument('--smooth', action='store_true',
                              help='Move mouse smoothly to target position')
     mouse_group.add_argument('--duration', type=float, default=1.0,
@@ -1972,20 +2039,33 @@ def main():
 
     # Handle replay mode
     if args.replay is not None:
-        replay_events(args.replay)
+        replay_events(args.replay, override_repeat=args.replay_repeat)
         return
 
     # Handle sequence mode
     if args.sequence is not None:
         if args.sequence.endswith('.json') and os.path.isfile(args.sequence):
             with open(args.sequence, 'r') as f:
-                actions = json.load(f)
+                sequence_data = json.load(f)
+                # Handle both array and object formats
+                if isinstance(sequence_data, list):
+                    actions = sequence_data
+                else:
+                    actions = sequence_data.get('actions', [])
+                    # Apply sequence-level repeat if specified
+                    sequence_repeat = sequence_data.get('repeat', 1)
+                    args.global_repeat = max(
+                        sequence_repeat, args.global_repeat)
         elif args.sequence.startswith('[') and args.sequence.endswith(']'):
             actions = json.loads(args.sequence)
         else:
             # Parse simple sequence syntax
             actions = parse_simple_sequence(args.sequence)
-        perform_sequence(actions)
+
+        if args.global_repeat > 1:
+            repeat_sequence(actions, args.global_repeat)
+        else:
+            perform_sequence(actions)
         return
 
     # Handle window selection
@@ -2007,26 +2087,28 @@ def main():
     # Handle mouse movement
     if args.move is not None:
         x, y = args.move
-        move_mouse(
-            x, y,
-            delay=args.delay,
-            check_bounds=not args.ignore_bounds,
-            smooth=args.smooth or args.global_smooth,
-            smooth_duration=args.duration if not args.global_smooth else args.global_duration,
-            smooth_steps=args.steps if not args.global_smooth else args.global_steps,
-            monitor_index=args.monitor_index
-        )
+        for _ in range(args.move_repeat):
+            move_mouse(
+                x, y,
+                delay=args.delay,
+                check_bounds=not args.ignore_bounds,
+                smooth=args.smooth or args.global_smooth,
+                smooth_duration=args.duration if not args.global_smooth else args.global_duration,
+                smooth_steps=args.steps if not args.global_smooth else args.global_steps,
+                monitor_index=args.monitor_index
+            )
 
     # Handle clicks
     if args.click or args.right_click or args.double_click:
         button = 'right' if args.right_click else args.global_button
-        perform_click(
-            button=button,
-            count=2 if args.double_click else args.click_count,
-            interval=args.click_interval if not args.global_interval else args.global_interval,
-            double=args.double_click,
-            delay_after=args.click_delay
-        )
+        for _ in range(args.click_repeat):
+            perform_click(
+                button=button,
+                count=2 if args.double_click else args.click_count,
+                interval=args.click_interval if not args.global_interval else args.global_interval,
+                double=args.double_click,
+                delay_after=args.click_delay
+            )
 
     # Handle drag operations
     if args.drag is not None or args.drag_from is not None:
@@ -2078,6 +2160,45 @@ def main():
     if args.wait is not None:
         print(f"Waiting {args.wait} seconds...")
         time.sleep(args.wait)
+
+    # Create a list to store all actions for potential repetition
+    all_actions = []
+
+    # Handle mouse movement with repeat
+    if args.move is not None:
+        x, y = args.move
+        for _ in range(args.move_repeat):
+            all_actions.append({
+                'type': 'move',
+                'x': x,
+                'y': y,
+                'delay': args.delay,
+                'check_bounds': not args.ignore_bounds,
+                'smooth': args.smooth or args.global_smooth,
+                'smooth_duration': args.duration if not args.global_smooth else args.global_duration,
+                'smooth_steps': args.steps if not args.global_smooth else args.global_steps,
+                'monitor_index': args.monitor_index
+            })
+
+    # Handle clicks with repeat
+    if args.click or args.right_click or args.double_click:
+        button = 'right' if args.right_click else args.global_button
+        for _ in range(args.click_repeat):
+            all_actions.append({
+                'type': 'click',
+                'button': button,
+                'count': 2 if args.double_click else args.click_count,
+                'interval': args.click_interval if not args.global_interval else args.global_interval,
+                'double': args.double_click,
+                'delay_after': args.click_delay
+            })
+
+    # Execute all actions with global repeat
+    if all_actions:
+        if args.global_repeat > 1:
+            repeat_sequence(all_actions, args.global_repeat)
+        else:
+            perform_sequence(all_actions)
 
 
 if __name__ == "__main__":
