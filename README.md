@@ -2,6 +2,44 @@
 
 A simple Python utility to move the mouse cursor to specified coordinates and perform mouse actions using command line arguments.
 
+## Features
+
+- **Mouse Control**
+
+  - Precise cursor movements with absolute coordinates
+  - Smooth movement interpolation
+  - Single and multi-click actions (left/right buttons)
+  - Drag operations with customizable paths
+  - Scroll wheel control with adjustable speed and steps
+
+- **Keyboard Control**
+
+  - Key press simulation with modifiers (Ctrl, Alt, Shift, etc.)
+  - Text typing with customizable speed
+  - Support for special keys (F1-F12, arrows, etc.)
+  - Modifier key holding/releasing
+
+- **Window Management**
+
+  - Window selection by title or process name
+  - Multi-monitor support with monitor-specific coordinates
+  - Cross-platform window activation (Linux, macOS, Windows)
+
+- **Automation Features**
+
+  - Record and replay capability for action sequences
+  - JSON-based sequence definition
+  - Simple command sequence syntax
+  - Global parameter configuration
+  - Action repetition control
+  - Customizable delays and intervals
+
+- **Monitoring Tools**
+
+  - Real-time mouse position monitoring
+  - Click event tracking
+  - Multi-monitor configuration display
+
 ## Installation
 
 1. Clone this repository:
