@@ -777,7 +777,27 @@ def perform_sequence(actions):
     for i, action in enumerate(actions):
         print(f"Performing action {i+1}/{len(actions)}: {action['type']}")
 
-        if action['type'] == 'hold_key':
+        # Validate action parameters
+        try:
+            validate_sequence_action(action)
+        except ValueError as e:
+            print(f"Error in action {i+1}: {e}")
+            continue
+
+        if action['type'] == 'window':
+            # Handle window selection
+            window_found = find_and_activate_window(
+                title=action.get('title'),
+                process=action.get('process'),
+                wait=action.get('wait', 1.0),
+                required=not action.get('not_required', False),
+                retry_count=action.get('retry_count', 3)
+            )
+            if not window_found and not action.get('not_required', False):
+                print("Stopping sequence due to window not found")
+                break
+
+        elif action['type'] == 'hold_key':
             key = action.get('key')
             if key:
                 held_keys[key] = hold_key(key)
@@ -827,6 +847,14 @@ def perform_sequence(actions):
                 delay_after=action.get('delay_after', 0)
             )
 
+        elif action['type'] == 'scroll':
+            perform_scroll(
+                amount=action['amount'],
+                steps=action.get('steps', 10),
+                interval=action.get('interval', 0.01),
+                delay_after=action.get('delay_after', 0)
+            )
+
         elif action['type'] == 'key':
             perform_key_press(
                 action['key'],
@@ -840,14 +868,6 @@ def perform_sequence(actions):
             perform_type(
                 action['text'],
                 interval=action.get('interval', 0.05),
-                delay_after=action.get('delay_after', 0)
-            )
-
-        elif action['type'] == 'scroll':
-            perform_scroll(
-                action['amount'],
-                steps=action.get('steps', 10),
-                interval=action.get('interval', 0.01),
                 delay_after=action.get('delay_after', 0)
             )
 
@@ -866,6 +886,36 @@ def perform_sequence(actions):
     for k, obj in held_keys.items():
         release_key(obj)
         print(f"Released {k} key")
+
+
+def validate_sequence_action(action):
+    """Validate a sequence action has all required parameters."""
+    required_params = {
+        'move': ['x', 'y'],
+        'click': [],  # click has no required params, all have defaults
+        'key': ['key'],
+        'type': ['text'],
+        'scroll': ['amount'],
+        # at least one of these must be present
+        'window': ['title', 'process'],
+        'wait': ['seconds']
+    }
+
+    if action['type'] not in required_params:
+        raise ValueError(f"Unknown action type: {action['type']}")
+
+    if action['type'] == 'window':
+        # Special case: window requires at least one of title or process
+        if not action.get('title') and not action.get('process'):
+            raise ValueError(
+                "Window action requires either 'title' or 'process'")
+        return
+
+    missing = [p for p in required_params[action['type']]
+               if p not in action]
+    if missing:
+        raise ValueError(
+            f"Missing required parameters for {action['type']}: {missing}")
 
 
 def record_events(output_file, duration=None):
@@ -1400,6 +1450,44 @@ def perform_scroll(amount, steps=10, interval=0.01, delay_after=0):
         time.sleep(delay_after)
 
 
+def hold_multiple_keys(keys):
+    """
+    Hold multiple modifier keys in a specific order.
+
+    Args:
+        keys (list): List of modifier keys to hold
+
+    Returns:
+        dict: Dictionary mapping key names to their key objects
+    """
+    # Define the order of modifier keys
+    key_order = ['ctrl', 'alt', 'shift', 'cmd', 'win', 'windows']
+
+    # Sort keys based on the defined order
+    sorted_keys = sorted(keys, key=lambda k: key_order.index(
+        k.lower()) if k.lower() in key_order else len(key_order))
+
+    held_keys = {}
+    for key in sorted_keys:
+        key_obj = hold_key(key)
+        if key_obj:
+            held_keys[key] = key_obj
+    return held_keys
+
+
+def release_multiple_keys(held_keys):
+    """
+    Release multiple held keys in reverse order of holding.
+
+    Args:
+        held_keys (dict): Dictionary of held keys from hold_multiple_keys
+    """
+    # Release keys in reverse order
+    for key in reversed(list(held_keys.keys())):
+        release_key(held_keys[key])
+        print(f"Released {key} key")
+
+
 def perform_key_press(key, modifiers=None, count=1, interval=0.1, delay_after=0):
     """
     Perform keyboard key press.
@@ -1412,6 +1500,7 @@ def perform_key_press(key, modifiers=None, count=1, interval=0.1, delay_after=0)
         delay_after (float): Delay after key press
     """
     keyboard = KeyboardController()
+    held_keys = {}
 
     # Convert string key to Key object if it's a special key
     if hasattr(Key, key):
@@ -1422,25 +1511,22 @@ def perform_key_press(key, modifiers=None, count=1, interval=0.1, delay_after=0)
         print(f"Warning: Unknown key '{key}'")
         return
 
-    # Handle modifiers
-    active_modifiers = []
-    if modifiers:
-        for mod in modifiers:
-            if hasattr(Key, mod.lower()):
-                mod_key = getattr(Key, mod.lower())
-                keyboard.press(mod_key)
-                active_modifiers.append(mod_key)
+    try:
+        # Handle modifiers
+        if modifiers:
+            held_keys = hold_multiple_keys(modifiers)
 
-    # Press the key the specified number of times
-    for _ in range(count):
-        keyboard.press(key)
-        keyboard.release(key)
-        if _ < count - 1:  # Don't sleep after last press
-            time.sleep(interval)
+        # Press the key the specified number of times
+        for _ in range(count):
+            keyboard.press(key)
+            keyboard.release(key)
+            if _ < count - 1:  # Don't sleep after last press
+                time.sleep(interval)
 
-    # Release modifiers
-    for mod_key in active_modifiers:
-        keyboard.release(mod_key)
+    finally:
+        # Always release modifier keys, even if an error occurs
+        if held_keys:
+            release_multiple_keys(held_keys)
 
     if delay_after > 0:
         time.sleep(delay_after)
@@ -1472,24 +1558,34 @@ def hold_key(key):
 
     Args:
         key (str): Key to hold down (e.g., 'cmd', 'ctrl', 'shift', 'alt')
+
+    Returns:
+        Key: Key object that was held down, or None if invalid key
     """
     keyboard = KeyboardController()
 
-    # Convert string key to Key object
-    if key.lower() in ['cmd', 'command', 'win', 'windows']:
-        key_obj = Key.cmd
-    elif key.lower() in ['ctrl', 'control']:
-        key_obj = Key.ctrl
-    elif key.lower() == 'alt':
-        key_obj = Key.alt
-    elif key.lower() == 'shift':
-        key_obj = Key.shift
+    # Map key names to Key objects
+    key_map = {
+        'cmd': Key.cmd,
+        'command': Key.cmd,
+        'win': Key.cmd,
+        'windows': Key.cmd,
+        'ctrl': Key.ctrl,
+        'control': Key.ctrl,
+        'alt': Key.alt,
+        'shift': Key.shift
+    }
+
+    # Convert key name to lowercase for case-insensitive matching
+    key_lower = key.lower()
+
+    if key_lower in key_map:
+        key_obj = key_map[key_lower]
+        keyboard.press(key_obj)
+        return key_obj
     else:
         print(f"Warning: Unsupported key '{key}' for holding")
         return None
-
-    keyboard.press(key_obj)
-    return key_obj
 
 
 def release_key(key_obj):
@@ -1618,6 +1714,96 @@ def parse_simple_sequence(sequence_str):
     return actions
 
 
+def list_windows():
+    """List all available window titles."""
+    system = platform.system()
+
+    if system == "Linux":
+        try:
+            output = subprocess.check_output(['wmctrl', '-l'], text=True)
+            print("\nAvailable Windows:")
+            print("=" * 80)
+            print(f"{'Window ID':<12} | {'Desktop':<8} | {'Title':<58}")
+            print("-" * 80)
+
+            for line in output.split('\n'):
+                if not line.strip():
+                    continue
+                parts = line.split(None, 3)
+                if len(parts) >= 4:
+                    window_id, desktop, _, title = parts
+                    print(f"{window_id:<12} | {desktop:<8} | {title[:58]}")
+
+            print("=" * 80)
+        except subprocess.CalledProcessError:
+            print("Error: wmctrl is not installed. Please install it using:")
+            print("sudo apt-get install wmctrl")
+
+    elif system == "Darwin":  # macOS
+        try:
+            script = '''
+                tell application "System Events"
+                    set windowList to {}
+                    repeat with proc in (processes where background only is false)
+                        set procName to name of proc
+                        repeat with w in (windows of proc)
+                            set end of windowList to {procName & ": " & name of w}
+                        end repeat
+                    end repeat
+                    return windowList
+                end tell
+            '''
+            output = subprocess.check_output(
+                ['osascript', '-e', script], text=True)
+
+            print("\nAvailable Windows:")
+            print("=" * 80)
+            print(f"{'Application/Window Title':<78}")
+            print("-" * 80)
+
+            for line in output.split(', '):
+                title = line.strip().strip('"{}')
+                if title:
+                    print(f"{title[:78]}")
+
+            print("=" * 80)
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing windows: {e}")
+
+    elif system == "Windows":
+        try:
+            script = '''
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Win32 {
+                [DllImport("user32.dll")]
+                public static extern IntPtr GetForegroundWindow();
+                
+                [DllImport("user32.dll")]
+                public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+                
+                [DllImport("user32.dll")]
+                public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+            }
+"@
+
+            Get-Process | Where-Object {$_.MainWindowTitle} | Select-Object ProcessName, MainWindowTitle | Format-Table -AutoSize
+            '''
+            output = subprocess.check_output(
+                ['powershell', '-Command', script], text=True)
+
+            print("\nAvailable Windows:")
+            print("=" * 80)
+            print(output)
+            print("=" * 80)
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing windows: {e}")
+
+    else:
+        print(f"Window listing is not supported on {system}")
+
+
 def main():
     """Parse command line arguments and execute the appropriate action."""
     parser = argparse.ArgumentParser(
@@ -1648,6 +1834,8 @@ def main():
                               help='Default button for all click/drag actions (default: left)')
     global_group.add_argument('--global-interval', type=float, default=0.1,
                               help='Default interval for all multi-actions (default: 0.1)')
+    global_group.add_argument('--wait', type=float,
+                              help='Wait for specified number of seconds')
 
     # Mouse movement options
     mouse_group = parser.add_argument_group('Mouse movement options')
@@ -1748,6 +1936,8 @@ def main():
 
     # Window selection options
     window_group = parser.add_argument_group('Window selection options')
+    window_group.add_argument('--list-windows', action='store_true',
+                              help='List all available window titles')
     window_group.add_argument('--window-title', type=str,
                               help='Select window by title (exact or partial match)')
     window_group.add_argument('--window-process', type=str,
@@ -1808,6 +1998,11 @@ def main():
             retry_count=args.window_retry
         ):
             return
+
+    # Handle window listing
+    if args.list_windows:
+        list_windows()
+        return
 
     # Handle mouse movement
     if args.move is not None:
@@ -1878,6 +2073,11 @@ def main():
             interval=args.scroll_interval,
             delay_after=args.scroll_delay
         )
+
+    # Handle wait command
+    if args.wait is not None:
+        print(f"Waiting {args.wait} seconds...")
+        time.sleep(args.wait)
 
 
 if __name__ == "__main__":
