@@ -889,7 +889,36 @@ chmod +x a_.py
 
 - Python 3.6 or higher
 - pynput 1.7.6
-- wmctrl (for window selection feature on Linux)
+
+### System Dependencies
+
+#### Linux
+
+For window selection and manipulation features on Linux, the following packages are required:
+
+- `wmctrl`: Window management utility
+- `xdotool`: Command-line X11 automation tool
+
+Install these dependencies using your distribution's package manager:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install wmctrl xdotool
+
+# Fedora
+sudo dnf install wmctrl xdotool
+
+# Arch Linux
+sudo pacman -S wmctrl xdotool
+```
+
+#### macOS
+
+Window selection features use native AppleScript. No additional dependencies required.
+
+#### Windows
+
+Window selection features use PowerShell. No additional dependencies required.
 
 ### Window Selection
 
