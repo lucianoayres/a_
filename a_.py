@@ -825,16 +825,6 @@ def perform_sequence(actions):
                 smooth=action.get('smooth', False),
                 smooth_duration=action.get('smooth_duration', 1.0),
                 smooth_steps=action.get('smooth_steps', 100),
-                click=action.get('click'),
-                click_count=action.get('click_count', 1),
-                click_interval=action.get('click_interval', 0.1),
-                double_click=action.get('double_click', False),
-                click_delay=action.get('click_delay', 0),
-                drag_to_x=action.get('drag_to_x'),
-                drag_to_y=action.get('drag_to_y'),
-                drag_smooth=action.get('drag_smooth', True),
-                click_before_drag=action.get('click_before_drag', False),
-                click_after_drag=action.get('click_after_drag', False),
                 monitor_index=action.get('monitor_index')
             )
 
@@ -1370,7 +1360,7 @@ def replay_events(input_file, override_repeat=None):
     print("\nReplay complete.")
 
 
-def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100, click=None, click_count=1, click_interval=0.1, double_click=False, click_delay=0, drag_to_x=None, drag_to_y=None, drag_smooth=True, click_before_drag=False, click_after_drag=False, monitor_index=None):
+def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1.0, smooth_steps=100, monitor_index=None):
     """
     Move the mouse to specified coordinates with various options.
 
@@ -1382,16 +1372,6 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         smooth (bool): Whether to move smoothly
         smooth_duration (float): Duration of smooth movement in seconds
         smooth_steps (int): Number of steps in smooth movement
-        click (str): Button to click after moving ('left', 'right', None)
-        click_count (int): Number of clicks
-        click_interval (float): Interval between clicks
-        double_click (bool): Whether to perform a double-click
-        click_delay (float): Delay after clicking
-        drag_to_x (int): X coordinate to drag to
-        drag_to_y (int): Y coordinate to drag to
-        drag_smooth (bool): Whether to move smoothly during drag
-        click_before_drag (bool): Whether to click before dragging
-        click_after_drag (bool): Whether to click after dragging
         monitor_index (int): Index of monitor to use for coordinates
     """
     mouse = MouseController()
@@ -1411,24 +1391,6 @@ def move_mouse(x, y, delay=0, check_bounds=True, smooth=False, smooth_duration=1
         smooth_move(start_x, start_y, x, y, smooth_duration, smooth_steps)
     else:
         mouse.position = (x, y)
-
-    # Handle clicking
-    if click or double_click:
-        perform_click(click, click_count, click_interval,
-                      double_click, click_delay)
-
-    # Handle dragging
-    if drag_to_x is not None and drag_to_y is not None:
-        if click_before_drag:
-            perform_click(click or 'left')
-
-        if drag_smooth:
-            smooth_move(x, y, drag_to_x, drag_to_y)
-        else:
-            mouse.position = (drag_to_x, drag_to_y)
-
-        if click_after_drag:
-            perform_click(click or 'left')
 
 
 def perform_click(button='left', count=1, interval=0.1, double=False, delay_after=0):
@@ -1935,6 +1897,8 @@ def main():
                              help='Interval between clicks in seconds (default: 0.1)')
     click_group.add_argument('--click-delay', type=float, default=0,
                              help='Delay after clicking in seconds (default: 0)')
+    click_group.add_argument(
+        '--click-repeat', **action_repeat)  # Add this line
 
     # Drag options
     drag_group = parser.add_argument_group('Drag options')
@@ -2018,6 +1982,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Add a flag to track if click was performed during move
+    click_performed = False
+
     # Handle monitor listing
     if args.list_monitors:
         list_monitors()
@@ -2084,83 +2051,6 @@ def main():
         list_windows()
         return
 
-    # Handle mouse movement
-    if args.move is not None:
-        x, y = args.move
-        for _ in range(args.move_repeat):
-            move_mouse(
-                x, y,
-                delay=args.delay,
-                check_bounds=not args.ignore_bounds,
-                smooth=args.smooth or args.global_smooth,
-                smooth_duration=args.duration if not args.global_smooth else args.global_duration,
-                smooth_steps=args.steps if not args.global_smooth else args.global_steps,
-                monitor_index=args.monitor_index
-            )
-
-    # Handle clicks
-    if args.click or args.right_click or args.double_click:
-        button = 'right' if args.right_click else args.global_button
-        for _ in range(args.click_repeat):
-            perform_click(
-                button=button,
-                count=2 if args.double_click else args.click_count,
-                interval=args.click_interval if not args.global_interval else args.global_interval,
-                double=args.double_click,
-                delay_after=args.click_delay
-            )
-
-    # Handle drag operations
-    if args.drag is not None or args.drag_from is not None:
-        if args.drag_from is not None:
-            x1, y1, x2, y2 = args.drag_from
-            move_mouse(x1, y1, smooth=not args.no_drag_smooth)
-            if args.click_before_drag:
-                perform_click(button=args.global_button)
-            move_mouse(x2, y2, smooth=not args.no_drag_smooth)
-            if args.click_after_drag:
-                perform_click(button=args.global_button)
-        else:
-            dx, dy = args.drag
-            if args.click_before_drag:
-                perform_click(button=args.global_button)
-            move_mouse(dx, dy, smooth=not args.no_drag_smooth)
-            if args.click_after_drag:
-                perform_click(button=args.global_button)
-
-    # Handle key operations
-    if args.key:
-        for key in args.key:
-            perform_key_press(
-                key,
-                modifiers=args.modifiers,
-                count=args.key_count,
-                interval=args.key_interval if not args.global_interval else args.global_interval,
-                delay_after=args.key_delay
-            )
-
-    # Handle text typing
-    if args.type:
-        perform_type(
-            args.type,
-            interval=args.type_interval,
-            delay_after=args.type_delay
-        )
-
-    # Handle scrolling
-    if args.scroll is not None:
-        perform_scroll(
-            args.scroll,
-            steps=args.scroll_steps,
-            interval=args.scroll_interval,
-            delay_after=args.scroll_delay
-        )
-
-    # Handle wait command
-    if args.wait is not None:
-        print(f"Waiting {args.wait} seconds...")
-        time.sleep(args.wait)
-
     # Create a list to store all actions for potential repetition
     all_actions = []
 
@@ -2192,6 +2082,89 @@ def main():
                 'double': args.double_click,
                 'delay_after': args.click_delay
             })
+
+    # Handle drag operations
+    if args.drag is not None or args.drag_from is not None:
+        if args.drag_from is not None:
+            x1, y1, x2, y2 = args.drag_from
+            all_actions.append({
+                'type': 'move',
+                'x': x1,
+                'y': y1,
+                'smooth': not args.no_drag_smooth
+            })
+            if args.click_before_drag:
+                all_actions.append({
+                    'type': 'click',
+                    'button': args.global_button
+                })
+            all_actions.append({
+                'type': 'move',
+                'x': x2,
+                'y': y2,
+                'smooth': not args.no_drag_smooth
+            })
+            if args.click_after_drag:
+                all_actions.append({
+                    'type': 'click',
+                    'button': args.global_button
+                })
+        else:
+            dx, dy = args.drag
+            if args.click_before_drag:
+                all_actions.append({
+                    'type': 'click',
+                    'button': args.global_button
+                })
+            all_actions.append({
+                'type': 'move',
+                'x': dx,
+                'y': dy,
+                'smooth': not args.no_drag_smooth
+            })
+            if args.click_after_drag:
+                all_actions.append({
+                    'type': 'click',
+                    'button': args.global_button
+                })
+
+    # Handle key operations
+    if args.key:
+        for key in args.key:
+            all_actions.append({
+                'type': 'key',
+                'key': key,
+                'modifiers': args.modifiers,
+                'count': args.key_count,
+                'interval': args.key_interval if not args.global_interval else args.global_interval,
+                'delay_after': args.key_delay
+            })
+
+    # Handle text typing
+    if args.type:
+        all_actions.append({
+            'type': 'type',
+            'text': args.type,
+            'interval': args.type_interval,
+            'delay_after': args.type_delay
+        })
+
+    # Handle scrolling
+    if args.scroll is not None:
+        all_actions.append({
+            'type': 'scroll',
+            'amount': args.scroll,
+            'steps': args.scroll_steps,
+            'interval': args.scroll_interval,
+            'delay_after': args.scroll_delay
+        })
+
+    # Handle wait command
+    if args.wait is not None:
+        all_actions.append({
+            'type': 'wait',
+            'seconds': args.wait
+        })
 
     # Execute all actions with global repeat
     if all_actions:
