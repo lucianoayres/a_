@@ -1193,6 +1193,9 @@ def record_events(output_file, duration=None):
             recording = False
 
         finally:
+            # Calculate total duration
+            end_time = time.time() - start_time
+
             # Stop listeners
             mouse_listener.stop()
             kb_listener.stop()
