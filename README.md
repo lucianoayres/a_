@@ -107,6 +107,43 @@ Available global parameters:
 - `--global-button [left|right]`: Default button for all click/drag actions (default: left)
 - `--global-interval SECONDS`: Default interval for all multi-actions (clicks, key presses) (default: 0.1)
 
+### Repeat Options
+
+The utility provides two ways to repeat actions:
+
+#### Global Repeat
+
+Use `--global-repeat` to repeat an entire sequence of actions:
+
+```bash
+# Repeat the entire sequence 3 times
+python a_.py --global-repeat 3 --move 500 300 --click --move 600 400
+```
+
+This will execute all actions (move to 500,300, click, move to 600,400) three times.
+
+#### Action-Specific Repeat
+
+Use `--repeat` to repeat only the previous action:
+
+```bash
+# Only repeat the move action 3 times, then click once
+python a_.py --move 500 300 --repeat 3 --click
+```
+
+The repeat functionality works with all action types:
+
+```bash
+# Repeat a click 5 times
+python a_.py --move 500 300 --click --repeat 5
+
+# Repeat a key press 3 times
+python a_.py --key space --repeat 3
+
+# Repeat a scroll action 4 times
+python a_.py --scroll 10 --repeat 4
+```
+
 #### Action-Specific Parameters
 
 Each action can have its own specific parameters that override global settings:
@@ -313,20 +350,6 @@ python a_.py --sequence '[
 ]'
 ```
 
-4. **Record/Replay Mode**:
-   The scroll functionality is automatically captured when recording mouse actions and can be replayed later:
-
-```bash
-# Record actions including scrolling
-python a_.py --record actions.json
-
-# Replay recorded actions
-python a_.py --replay actions.json
-
-# Replay with repeat
-python a_.py --replay actions.json --replay-repeat 3
-```
-
 #### Scroll Parameters
 
 The scroll behavior can be customized with these parameters:
@@ -337,6 +360,44 @@ The scroll behavior can be customized with these parameters:
 - `--scroll-delay SECONDS`: Delay after scrolling completes (default: 0)
 
 These parameters work consistently across all modes (command line, sequence, and record/replay).
+
+### Record and Replay
+
+The utility allows you to record mouse and keyboard actions and replay them later. All actions including mouse movements, clicks, scrolls, keyboard input, and waits are captured.
+
+#### Basic Usage
+
+```bash
+# Record actions to default file (recorded_actions.json)
+python a_.py --record
+
+# Record actions to a specific file
+python a_.py --record my_actions.json
+
+# Replay actions from default file (recorded_actions.json)
+python a_.py --replay
+
+# Replay actions from a specific file
+python a_.py --replay my_actions.json
+
+# Replay with repeat override
+python a_.py --replay my_actions.json --replay-repeat 3
+```
+
+When no filename is specified:
+
+- `--record` will save to `recorded_actions.json` in the current directory
+- `--replay` will read from `recorded_actions.json` in the current directory
+
+#### Recording Options
+
+- `--record [OUTPUT_FILE]`: Record actions to a file (default: recorded_actions.json)
+- `--record-duration SECONDS`: Duration to record in seconds (default: indefinite)
+
+#### Replay Options
+
+- `--replay [INPUT_FILE]`: Replay actions from a file (default: recorded_actions.json)
+- `--replay-repeat COUNT`: Override the repeat count when replaying
 
 ### Complex Sequence Examples
 
