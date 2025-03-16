@@ -764,10 +764,31 @@ def perform_sequence(actions):
     Args:
         actions (list): List of action dictionaries, each containing the action type and parameters
     """
+    held_keys = {}  # Keep track of held keys
+
     for i, action in enumerate(actions):
         print(f"Performing action {i+1}/{len(actions)}: {action['type']}")
 
-        if action['type'] == 'move':
+        if action['type'] == 'hold_key':
+            key = action.get('key')
+            if key:
+                held_keys[key] = hold_key(key)
+                print(f"Holding {key} key...")
+
+        elif action['type'] == 'release_key':
+            key = action.get('key')
+            if key and key in held_keys:
+                release_key(held_keys[key])
+                del held_keys[key]
+                print(f"Released {key} key")
+            elif action.get('all', False):
+                # Release all held keys
+                for k, obj in held_keys.items():
+                    release_key(obj)
+                    print(f"Released {k} key")
+                held_keys.clear()
+
+        elif action['type'] == 'move':
             move_mouse(
                 action['x'],
                 action['y'],
@@ -831,6 +852,11 @@ def perform_sequence(actions):
             print(f"Waiting {delay} seconds before next action...")
             time.sleep(delay)
 
+    # Release any remaining held keys
+    for k, obj in held_keys.items():
+        release_key(obj)
+        print(f"Released {k} key")
+
 
 def record_events(output_file, duration=None):
     """
@@ -846,6 +872,7 @@ def record_events(output_file, duration=None):
     recording = True
     last_position = mouse.position
     event_count = 0
+    held_keys = set()  # Track currently held keys
 
     def on_move(x, y):
         if not recording:
@@ -898,6 +925,30 @@ def record_events(output_file, duration=None):
         print(
             f"\rRecorded events: {event_count} | Last event: Scrolled {direction}", end="")
 
+    def get_key_name(key):
+        """Convert key to a consistent string representation."""
+        if isinstance(key, KeyCode):
+            return key.char if key.char else f'<{key.vk}>'
+        if isinstance(key, Key):
+            name = key.name.lower()
+            if name in ['ctrl_l', 'ctrl_r']:
+                return 'ctrl'
+            if name in ['alt_l', 'alt_r']:
+                return 'alt'
+            if name in ['shift_l', 'shift_r']:
+                return 'shift'
+            if name in ['cmd_l', 'cmd_r', 'cmd']:
+                return 'cmd'
+            return name
+        return str(key)
+
+    def is_modifier_key(key):
+        """Check if the key is a modifier key."""
+        if isinstance(key, Key):
+            name = key.name.lower()
+            return name in ['ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift_l', 'shift_r', 'cmd_l', 'cmd_r', 'cmd']
+        return False
+
     def on_press(key):
         if not recording:
             return False
@@ -912,22 +963,50 @@ def record_events(output_file, duration=None):
         except AttributeError:
             pass
 
-        # Convert key to string representation
-        key_str = None
-        if hasattr(key, 'char'):
-            key_str = key.char
-        elif hasattr(key, 'name'):
-            key_str = key.name
+        key_name = get_key_name(key)
 
-        if key_str:
+        if is_modifier_key(key):
+            # Record modifier key press as hold_key event
+            if key_name not in held_keys:
+                held_keys.add(key_name)
+                events.append({
+                    "type": "hold_key",
+                    "key": key_name,
+                    "time": current_time
+                })
+                event_count += 1
+                print(
+                    f"\rRecorded events: {event_count} | Last event: Hold key '{key_name}'", end="")
+        else:
+            # Regular key press
             events.append({
                 "type": "key",
-                "key": key_str,
+                "key": key_name,
                 "time": current_time
             })
             event_count += 1
             print(
-                f"\rRecorded events: {event_count} | Last event: Key press '{key_str}'", end="")
+                f"\rRecorded events: {event_count} | Last event: Key press '{key_name}'", end="")
+
+    def on_release(key):
+        if not recording:
+            return False
+        nonlocal event_count
+        current_time = time.time() - start_time
+
+        key_name = get_key_name(key)
+
+        if is_modifier_key(key) and key_name in held_keys:
+            # Record modifier key release
+            held_keys.remove(key_name)
+            events.append({
+                "type": "release_key",
+                "key": key_name,
+                "time": current_time
+            })
+            event_count += 1
+            print(
+                f"\rRecorded events: {event_count} | Last event: Release key '{key_name}'", end="")
 
     # Start listeners
     print("\nRecording mouse and keyboard events. Press Esc to stop.")
@@ -936,7 +1015,7 @@ def record_events(output_file, duration=None):
     print("-" * 50)
 
     with MouseListener(on_move=on_move, on_click=on_click, on_scroll=on_scroll) as mouse_listener, \
-            KeyboardListener(on_press=on_press) as kb_listener:
+            KeyboardListener(on_press=on_press, on_release=on_release) as kb_listener:
 
         try:
             while recording:
@@ -1000,46 +1079,61 @@ def replay_events(input_file):
     print("=" * 50)
     print("Press Ctrl+C to stop replay")
 
+    # Keep track of held keys
+    held_keys = {}
+
     try:
         for i, event in enumerate(events, 1):
-            # Get the delay for this event (will be used as movement duration for mouse moves)
+            # Get the delay for this event
             delay = event.get('delay', 0)
+
+            # Wait the delay before any action
+            if delay > 0:
+                time.sleep(delay)
 
             print(f"Event {i}/{len(events)}: {event['type']}")
 
-            if event['type'] == 'move':
+            if event['type'] == 'hold_key':
+                key = event.get('key')
+                if key:
+                    held_keys[key] = hold_key(key)
+                    print(f"Holding {key} key...")
+
+            elif event['type'] == 'release_key':
+                key = event.get('key')
+                if key and key in held_keys:
+                    release_key(held_keys[key])
+                    del held_keys[key]
+                    print(f"Released {key} key")
+
+            elif event['type'] == 'move':
                 move_mouse(
                     event['x'],
                     event['y'],
                     smooth=event.get('smooth', False),
-                    # Use recorded delay as movement duration
-                    smooth_duration=delay if delay > 0 else 0.1
+                    smooth_duration=0.1  # Use a small duration for smoother replay
                 )
             elif event['type'] == 'click':
-                # Wait the delay before clicking
-                if delay > 0:
-                    time.sleep(delay)
                 perform_click(
                     button=event.get('button', 'left'),
                     count=event.get('count', 1)
                 )
             elif event['type'] == 'scroll':
-                # Wait the delay before scrolling
-                if delay > 0:
-                    time.sleep(delay)
                 perform_scroll(
                     amount=event['amount']
                 )
             elif event['type'] == 'key':
-                # Wait the delay before key press
-                if delay > 0:
-                    time.sleep(delay)
                 perform_key_press(
                     event['key']
                 )
 
     except KeyboardInterrupt:
         print("\nReplay stopped by user.")
+    finally:
+        # Release any remaining held keys
+        for k, obj in held_keys.items():
+            release_key(obj)
+            print(f"Released {k} key")
 
     print("\nReplay complete.")
 
@@ -1220,6 +1314,44 @@ def perform_type(text, interval=0.05, delay_after=0):
         time.sleep(delay_after)
 
 
+def hold_key(key):
+    """
+    Hold down a key.
+
+    Args:
+        key (str): Key to hold down (e.g., 'cmd', 'ctrl', 'shift', 'alt')
+    """
+    keyboard = KeyboardController()
+
+    # Convert string key to Key object
+    if key.lower() in ['cmd', 'command', 'win', 'windows']:
+        key_obj = Key.cmd
+    elif key.lower() in ['ctrl', 'control']:
+        key_obj = Key.ctrl
+    elif key.lower() == 'alt':
+        key_obj = Key.alt
+    elif key.lower() == 'shift':
+        key_obj = Key.shift
+    else:
+        print(f"Warning: Unsupported key '{key}' for holding")
+        return None
+
+    keyboard.press(key_obj)
+    return key_obj
+
+
+def release_key(key_obj):
+    """
+    Release a previously held key.
+
+    Args:
+        key_obj: Key object to release
+    """
+    if key_obj is not None:
+        keyboard = KeyboardController()
+        keyboard.release(key_obj)
+
+
 def main():
     """Parse command line arguments and execute the appropriate action."""
     parser = argparse.ArgumentParser(
@@ -1234,7 +1366,24 @@ def main():
     record_group.add_argument('--replay', nargs='?', const='recorded_actions.json', metavar='INPUT_FILE',
                               help='Replay recorded events from a file (default: recorded_actions.json)')
 
-    # ... rest of the argument parsing ...
+    # Key options
+    key_group = parser.add_argument_group('Key options')
+    key_group.add_argument('--hold-key', choices=['cmd', 'ctrl', 'alt', 'shift'],
+                           help='Hold down a modifier key')
+    key_group.add_argument('--release-key', action='store_true',
+                           help='Release the currently held key')
+    key_group.add_argument('--key', action='append',
+                           help='Press a key (e.g., a, enter, space, tab, f1-f12, etc.)')
+    key_group.add_argument('--modifiers', nargs='+',
+                           choices=['ctrl', 'control', 'alt', 'shift',
+                                    'cmd', 'command', 'win', 'windows'],
+                           help='Modifier keys to hold while pressing the key')
+    key_group.add_argument('--key-count', type=int, default=1,
+                           help='Number of times to press the key (default: 1)')
+    key_group.add_argument('--key-interval', type=float, default=0.1,
+                           help='Interval between key presses in seconds (default: 0.1)')
+    key_group.add_argument('--key-delay', type=float, default=0,
+                           help='Delay after key press in seconds (default: 0)')
 
     args = parser.parse_args()
 
@@ -1248,7 +1397,29 @@ def main():
         replay_events(args.replay)
         return
 
-    # ... rest of the main function ...
+    # Handle key holding and pressing
+    held_key_obj = None
+    try:
+        if args.hold_key:
+            held_key_obj = hold_key(args.hold_key)
+            print(f"Holding {args.hold_key} key...")
+
+        if args.key:
+            for key in args.key:
+                perform_key_press(
+                    key,
+                    modifiers=args.modifiers,
+                    count=args.key_count,
+                    interval=args.key_interval,
+                    delay_after=args.key_delay
+                )
+                print(f"Pressed key: {key}")
+
+    finally:
+        # Always release held key when done
+        if held_key_obj is not None and args.release_key:
+            release_key(held_key_obj)
+            print(f"Released {args.hold_key} key")
 
 
 if __name__ == "__main__":
