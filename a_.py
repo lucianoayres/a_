@@ -1227,24 +1227,24 @@ def main():
 
     # Record and Replay options
     record_group = parser.add_argument_group('Record and Replay options')
-    record_group.add_argument('--record', type=str, metavar='OUTPUT_FILE',
-                              help='Record mouse and keyboard events to a file')
+    record_group.add_argument('--record', nargs='?', const='recorded_actions.json', metavar='OUTPUT_FILE',
+                              help='Record mouse and keyboard events to a file (default: recorded_actions.json)')
     record_group.add_argument('--record-duration', type=float,
                               help='Duration to record in seconds (default: indefinite)')
-    record_group.add_argument('--replay', type=str, metavar='INPUT_FILE',
-                              help='Replay recorded events from a file')
+    record_group.add_argument('--replay', nargs='?', const='recorded_actions.json', metavar='INPUT_FILE',
+                              help='Replay recorded events from a file (default: recorded_actions.json)')
 
     # ... rest of the argument parsing ...
 
     args = parser.parse_args()
 
     # Handle record mode
-    if args.record:
+    if args.record is not None:
         record_events(args.record, args.record_duration)
         return
 
     # Handle replay mode
-    if args.replay:
+    if args.replay is not None:
         replay_events(args.replay)
         return
 
