@@ -727,6 +727,10 @@ def smooth_move(start_x, start_y, end_x, end_y, duration=1.0, steps=100):
     # Calculate the distance to move
     dx = end_x - start_x
     dy = end_y - start_y
+    distance = math.sqrt(dx * dx + dy * dy)
+
+    # Adjust steps based on distance (more steps for longer distances)
+    steps = min(max(int(distance / 5), 50), 150)  # Between 50 and 150 steps
 
     # Calculate the time to sleep between steps
     sleep_time = duration / steps
@@ -734,27 +738,31 @@ def smooth_move(start_x, start_y, end_x, end_y, duration=1.0, steps=100):
     print(
         f"Moving mouse smoothly from ({start_x}, {start_y}) to ({end_x}, {end_y}) over {duration} seconds")
 
-    # Use easing function for smoother acceleration/deceleration
+    def ease_in_out_quad(t):
+        """Quadratic easing function for smooth acceleration and deceleration"""
+        if t < 0.5:
+            return 2 * t * t
+        t = 2 * t - 2
+        return -0.5 * (t * t - 2)
+
+    # Move in steps using quadratic easing
     for step in range(steps + 1):
-        # Use sine easing for smooth acceleration and deceleration
         t = step / steps
-        # Ease in-out sine function
-        ease = 0.5 - 0.5 * math.cos(math.pi * t)
+        # Apply easing
+        ease = ease_in_out_quad(t)
 
         # Calculate intermediate position
         ix = start_x + dx * ease
         iy = start_y + dy * ease
 
         # Move to intermediate position
-        mouse.position = (ix, iy)
+        mouse.position = (int(ix), int(iy))
 
-        # Sleep for a short time
+        # Sleep for a fixed time between steps
         time.sleep(sleep_time)
 
     # Ensure we end up exactly at the target position
     mouse.position = (end_x, end_y)
-    print(
-        f"Smooth movement complete. Current mouse position: {mouse.position}")
 
 
 def perform_sequence(actions):
@@ -792,59 +800,61 @@ def perform_sequence(actions):
             move_mouse(
                 action['x'],
                 action['y'],
-                action.get('delay', 0),
-                action.get('check_bounds', True),
-                action.get('smooth', False),
-                action.get('smooth_duration', 1.0),
-                action.get('smooth_steps', 100),
-                action.get('click'),
-                action.get('click_count', 1),
-                action.get('click_interval', 0.1),
-                action.get('double_click', False),
-                action.get('click_delay', 0),
-                action.get('drag_to_x'),
-                action.get('drag_to_y'),
-                action.get('drag_smooth', True),
-                action.get('click_before_drag', False),
-                action.get('click_after_drag', False),
-                action.get('monitor_index')
+                delay=action.get('delay', 0),
+                check_bounds=action.get('check_bounds', True),
+                smooth=action.get('smooth', False),
+                smooth_duration=action.get('smooth_duration', 1.0),
+                smooth_steps=action.get('smooth_steps', 100),
+                click=action.get('click'),
+                click_count=action.get('click_count', 1),
+                click_interval=action.get('click_interval', 0.1),
+                double_click=action.get('double_click', False),
+                click_delay=action.get('click_delay', 0),
+                drag_to_x=action.get('drag_to_x'),
+                drag_to_y=action.get('drag_to_y'),
+                drag_smooth=action.get('drag_smooth', True),
+                click_before_drag=action.get('click_before_drag', False),
+                click_after_drag=action.get('click_after_drag', False),
+                monitor_index=action.get('monitor_index')
             )
+
+        elif action['type'] == 'click':
+            perform_click(
+                button=action.get('button', 'left'),
+                count=action.get('count', 1),
+                interval=action.get('interval', 0.1),
+                double=action.get('double', False),
+                delay_after=action.get('delay_after', 0)
+            )
+
         elif action['type'] == 'key':
             perform_key_press(
                 action['key'],
-                action.get('modifiers'),
-                action.get('count', 1),
-                action.get('interval', 0.1),
-                action.get('delay_after', 0)
+                modifiers=action.get('modifiers'),
+                count=action.get('count', 1),
+                interval=action.get('interval', 0.1),
+                delay_after=action.get('delay_after', 0)
             )
-        elif action['type'] == 'click':
-            perform_click(
-                action.get('button', 'left'),
-                action.get('count', 1),
-                action.get('interval', 0.1),
-                action.get('double', False),
-                action.get('delay_after', 0)
-            )
-        elif action['type'] == 'wait':
-            delay = action.get('seconds', 1.0)
-            print(f"Waiting for {delay} seconds...")
-            time.sleep(delay)
+
         elif action['type'] == 'type':
             perform_type(
                 action['text'],
-                action.get('interval', 0.05),
-                action.get('delay_after', 0)
+                interval=action.get('interval', 0.05),
+                delay_after=action.get('delay_after', 0)
             )
+
         elif action['type'] == 'scroll':
             perform_scroll(
                 action['amount'],
-                action.get('steps', 10),
-                action.get('interval', 0.01),
-                action.get('delay_after', 0)
+                steps=action.get('steps', 10),
+                interval=action.get('interval', 0.01),
+                delay_after=action.get('delay_after', 0)
             )
-        else:
-            print(
-                f"Warning: Unknown action type '{action['type']}'. Skipping.")
+
+        elif action['type'] == 'wait':
+            delay = action.get('seconds', 1.0)
+            print(f"Waiting {delay} seconds...")
+            time.sleep(delay)
 
         # Wait between actions if specified
         if i < len(actions) - 1 and action.get('delay_after_action', 0) > 0:
@@ -873,14 +883,120 @@ def record_events(output_file, duration=None):
     last_position = mouse.position
     event_count = 0
     held_keys = set()  # Track currently held keys
+    last_window_check = 0
+    WINDOW_CHECK_INTERVAL = 0.1  # Only check window every 100ms
+    last_window = None
+    MOVEMENT_THRESHOLD = 10  # Minimum pixel distance for recording movement
+    MIN_MOVEMENT_DELAY = 0.05  # Minimum delay between recorded movements
+
+    def get_active_window():
+        """Get current active window information."""
+        system = platform.system()
+        if system == "Linux":
+            try:
+                output = subprocess.check_output(
+                    ['xdotool', 'getactivewindow', 'getwindowname'], text=True).strip()
+                return {'title': output}
+            except (subprocess.SubprocessError, FileNotFoundError):
+                return None
+        elif system == "Darwin":
+            try:
+                script = '''
+                    tell application "System Events"
+                        set frontApp to first application process whose frontmost is true
+                        return {name of frontApp, name of window 1 of frontApp}
+                    end tell
+                '''
+                output = subprocess.check_output(
+                    ['osascript', '-e', script], text=True).strip()
+                app_name, window_title = output.split(', ')
+                return {'process': app_name, 'title': window_title}
+            except (subprocess.SubprocessError, FileNotFoundError):
+                return None
+        elif system == "Windows":
+            try:
+                script = '''
+                Add-Type @"
+                    using System;
+                    using System.Runtime.InteropServices;
+                    public class Win32 {
+                        [DllImport("user32.dll")]
+                        public static extern IntPtr GetForegroundWindow();
+                        
+                        [DllImport("user32.dll")]
+                        public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+                        
+                        [DllImport("user32.dll")]
+                        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+                    }
+"@
+
+                $hwnd = [Win32]::GetForegroundWindow()
+                $processId = 0
+                [Win32]::GetWindowThreadProcessId($hwnd, [ref]$processId)
+                $process = Get-Process -Id $processId
+                $sb = New-Object System.Text.StringBuilder(256)
+                [Win32]::GetWindowText($hwnd, $sb, 256)
+                $windowTitle = $sb.ToString()
+                Write-Output "$($process.ProcessName)|$windowTitle"
+                '''
+                output = subprocess.check_output(
+                    ['powershell', '-Command', script], text=True).strip()
+                process_name, window_title = output.split('|')
+                return {'process': process_name, 'title': window_title}
+            except (subprocess.SubprocessError, FileNotFoundError):
+                return None
+        return None
+
+    def check_and_record_window_change():
+        """Check if active window has changed and record if it has."""
+        nonlocal event_count, last_window_check, last_window
+        current_time = time.time()
+
+        # Only check window periodically or during significant events
+        if current_time - last_window_check < WINDOW_CHECK_INTERVAL:
+            return
+
+        last_window_check = current_time
+        current_window = get_active_window()
+
+        if current_window and (last_window is None or
+                               any(current_window[k] != last_window[k] for k in current_window)):
+            last_window = current_window
+            events.append({
+                "type": "window",
+                "time": current_time - start_time,
+                **current_window
+            })
+            event_count += 1
+            print(
+                f"\rRecorded events: {event_count} | Last event: Window changed to {current_window.get('title', '')}", end="")
+
+    # Get initial window
+    last_window = get_active_window()
+    if last_window:
+        events.append({
+            "type": "window",
+            "time": 0,
+            **last_window
+        })
 
     def on_move(x, y):
         if not recording:
             return False
         nonlocal last_position, event_count
         current_time = time.time() - start_time
-        # Only record if position changed significantly (avoid micro-movements)
-        if abs(x - last_position[0]) > 2 or abs(y - last_position[1]) > 2:
+
+        # Calculate distance moved
+        dx = x - last_position[0]
+        dy = y - last_position[1]
+        distance = math.sqrt(dx*dx + dy*dy)
+
+        # Only record if position changed significantly and enough time has passed
+        if distance > MOVEMENT_THRESHOLD and (not events or
+                                              events[-1]['type'] != 'move' or
+                                              current_time - events[-1]['time'] >= MIN_MOVEMENT_DELAY):
+
             events.append({
                 "type": "move",
                 "x": x,
@@ -899,6 +1015,7 @@ def record_events(output_file, duration=None):
         nonlocal event_count
         current_time = time.time() - start_time
         if pressed:
+            check_and_record_window_change()  # Check window on clicks
             btn_name = "left" if button == Button.left else "right"
             events.append({
                 "type": "click",
@@ -914,6 +1031,7 @@ def record_events(output_file, duration=None):
             return False
         nonlocal event_count
         current_time = time.time() - start_time
+        check_and_record_window_change()  # Check window on scroll
         amount = int(dy * 10)
         direction = "up" if amount > 0 else "down"
         events.append({
@@ -963,6 +1081,7 @@ def record_events(output_file, duration=None):
         except AttributeError:
             pass
 
+        check_and_record_window_change()  # Check window on key press
         key_name = get_key_name(key)
 
         if is_modifier_key(key):
@@ -994,6 +1113,7 @@ def record_events(output_file, duration=None):
         nonlocal event_count
         current_time = time.time() - start_time
 
+        check_and_record_window_change()  # Check window on key release
         key_name = get_key_name(key)
 
         if is_modifier_key(key) and key_name in held_keys:
@@ -1081,19 +1201,51 @@ def replay_events(input_file):
 
     # Keep track of held keys
     held_keys = {}
+    current_window = None
+
+    # Optimize delays for smoother playback
+    MAX_MOVEMENT_DELAY = 0.05  # Cap movement delays
+    CLICK_DELAY_FACTOR = 0.5   # Reduce click delays
+    KEY_DELAY_FACTOR = 0.75    # Reduce key press delays
 
     try:
         for i, event in enumerate(events, 1):
-            # Get the delay for this event
+            # Get and adjust the delay based on event type
             delay = event.get('delay', 0)
 
-            # Wait the delay before any action
+            if event['type'] == 'move':
+                delay = min(delay, MAX_MOVEMENT_DELAY)
+            elif event['type'] == 'click':
+                delay *= CLICK_DELAY_FACTOR
+            elif event['type'] == 'key':
+                delay *= KEY_DELAY_FACTOR
+
+            # Wait the adjusted delay before any action
             if delay > 0:
                 time.sleep(delay)
 
             print(f"Event {i}/{len(events)}: {event['type']}")
 
-            if event['type'] == 'hold_key':
+            if event['type'] == 'window':
+                # Try to find and activate the window
+                window_found = False
+                if 'process' in event:
+                    print(f"Activating window for process: {event['process']}")
+                    window_found = find_and_activate_window(
+                        process=event['process'], wait=1, required=False)
+                if not window_found and 'title' in event:
+                    print(f"Activating window with title: {event['title']}")
+                    window_found = find_and_activate_window(
+                        title=event['title'], wait=1, required=False)
+                if window_found:
+                    current_window = event
+                    print(
+                        f"Successfully activated window: {event.get('title', event.get('process', 'Unknown'))}")
+                else:
+                    print(
+                        f"Warning: Could not find window: {event.get('title', event.get('process', 'Unknown'))}")
+
+            elif event['type'] == 'hold_key':
                 key = event.get('key')
                 if key:
                     held_keys[key] = hold_key(key)
@@ -1111,7 +1263,7 @@ def replay_events(input_file):
                     event['x'],
                     event['y'],
                     smooth=event.get('smooth', False),
-                    smooth_duration=0.1  # Use a small duration for smoother replay
+                    smooth_duration=0.001  # Faster smooth movement
                 )
             elif event['type'] == 'click':
                 perform_click(
@@ -1352,6 +1504,120 @@ def release_key(key_obj):
         keyboard.release(key_obj)
 
 
+def parse_simple_sequence(sequence_str):
+    """
+    Parse a simple sequence string into a list of action dictionaries.
+
+    Args:
+        sequence_str (str): Sequence string in format "action1 param1 param2; action2 param1 param2"
+
+    Returns:
+        list: List of action dictionaries
+    """
+    actions = []
+    commands = [cmd.strip() for cmd in sequence_str.split(';')]
+
+    for cmd in commands:
+        if not cmd:
+            continue
+
+        parts = shlex.split(cmd)  # Properly handle quoted strings
+        action_type = parts[0].lower()
+        params = parts[1:]
+
+        if action_type == 'move':
+            if len(params) >= 2:
+                action = {
+                    'type': 'move',
+                    'x': int(params[0]),
+                    'y': int(params[1]),
+                    'smooth': '--smooth' in params
+                }
+                actions.append(action)
+
+        elif action_type == 'click':
+            action = {
+                'type': 'click',
+                'button': params[0] if params and params[0] in ['left', 'right'] else 'left',
+                'count': int(params[1]) if len(params) > 1 else 1
+            }
+            actions.append(action)
+
+        elif action_type == 'key':
+            if params:
+                action = {
+                    'type': 'key',
+                    'key': params[0]
+                }
+                # Check for modifiers
+                if len(params) > 1:
+                    action['modifiers'] = [mod for mod in params[1:] if mod in
+                                           ['ctrl', 'control', 'alt', 'shift', 'cmd', 'command', 'win', 'windows']]
+                actions.append(action)
+
+        elif action_type == 'wait':
+            if params:
+                action = {
+                    'type': 'wait',
+                    'seconds': float(params[0])
+                }
+                actions.append(action)
+
+        elif action_type == 'drag':
+            if len(params) >= 2:
+                action = {
+                    'type': 'move',
+                    'x': int(params[0]),
+                    'y': int(params[1]),
+                    'drag': True
+                }
+                actions.append(action)
+
+        elif action_type == 'drag_from':
+            if len(params) >= 4:
+                actions.extend([
+                    {
+                        'type': 'move',
+                        'x': int(params[0]),
+                        'y': int(params[1])
+                    },
+                    {
+                        'type': 'move',
+                        'x': int(params[2]),
+                        'y': int(params[3]),
+                        'drag': True
+                    }
+                ])
+
+        elif action_type == 'type':
+            if params:
+                action = {
+                    'type': 'type',
+                    'text': params[0]
+                }
+                # Check for interval parameter
+                for i, param in enumerate(params):
+                    if param == '--interval' and i + 1 < len(params):
+                        action['interval'] = float(params[i + 1])
+                actions.append(action)
+
+        elif action_type == 'scroll':
+            if params:
+                action = {
+                    'type': 'scroll',
+                    'amount': int(params[0])
+                }
+                # Check for additional parameters
+                for i, param in enumerate(params):
+                    if param == '--steps' and i + 1 < len(params):
+                        action['steps'] = int(params[i + 1])
+                    elif param == '--interval' and i + 1 < len(params):
+                        action['interval'] = float(params[i + 1])
+                actions.append(action)
+
+    return actions
+
+
 def main():
     """Parse command line arguments and execute the appropriate action."""
     parser = argparse.ArgumentParser(
@@ -1365,6 +1631,68 @@ def main():
                               help='Duration to record in seconds (default: indefinite)')
     record_group.add_argument('--replay', nargs='?', const='recorded_actions.json', metavar='INPUT_FILE',
                               help='Replay recorded events from a file (default: recorded_actions.json)')
+    record_group.add_argument('--sequence', type=str,
+                              help='Execute a sequence of actions (simple syntax or JSON file)')
+
+    # Global options
+    global_group = parser.add_argument_group('Global options')
+    global_group.add_argument('--global-delay', type=float, default=0,
+                              help='Default delay between all actions (default: 0)')
+    global_group.add_argument('--global-smooth', action='store_true',
+                              help='Enable smooth movement for all move/drag actions')
+    global_group.add_argument('--global-duration', type=float, default=1.0,
+                              help='Default duration for all smooth movements (default: 1.0)')
+    global_group.add_argument('--global-steps', type=int, default=100,
+                              help='Default steps for all smooth movements (default: 100)')
+    global_group.add_argument('--global-button', choices=['left', 'right'], default='left',
+                              help='Default button for all click/drag actions (default: left)')
+    global_group.add_argument('--global-interval', type=float, default=0.1,
+                              help='Default interval for all multi-actions (default: 0.1)')
+
+    # Mouse movement options
+    mouse_group = parser.add_argument_group('Mouse movement options')
+    mouse_group.add_argument('--move', nargs=2, type=int, metavar=('X', 'Y'),
+                             help='Move mouse to specified X,Y coordinates')
+    mouse_group.add_argument('--smooth', action='store_true',
+                             help='Move mouse smoothly to target position')
+    mouse_group.add_argument('--duration', type=float, default=1.0,
+                             help='Duration of smooth movement in seconds (default: 1.0)')
+    mouse_group.add_argument('--steps', type=int, default=100,
+                             help='Number of steps in smooth movement (default: 100)')
+    mouse_group.add_argument('--delay', type=float, default=0,
+                             help='Delay before moving in seconds (default: 0)')
+    mouse_group.add_argument('--monitor-index', type=int,
+                             help='Index of monitor to use for coordinates')
+    mouse_group.add_argument('--ignore-bounds', action='store_true',
+                             help='Ignore screen boundary checks')
+
+    # Click options
+    click_group = parser.add_argument_group('Click options')
+    click_group.add_argument('--click', action='store_true',
+                             help='Perform a left click')
+    click_group.add_argument('--right-click', action='store_true',
+                             help='Perform a right click')
+    click_group.add_argument('--double-click', action='store_true',
+                             help='Perform a double click')
+    click_group.add_argument('--click-count', type=int, default=1,
+                             help='Number of clicks to perform (default: 1)')
+    click_group.add_argument('--click-interval', type=float, default=0.1,
+                             help='Interval between clicks in seconds (default: 0.1)')
+    click_group.add_argument('--click-delay', type=float, default=0,
+                             help='Delay after clicking in seconds (default: 0)')
+
+    # Drag options
+    drag_group = parser.add_argument_group('Drag options')
+    drag_group.add_argument('--drag', nargs=2, type=int, metavar=('DX', 'DY'),
+                            help='Drag to specified coordinates')
+    drag_group.add_argument('--drag-from', nargs=4, type=int, metavar=('X1', 'Y1', 'X2', 'Y2'),
+                            help='Drag from X1,Y1 to X2,Y2')
+    drag_group.add_argument('--no-drag-smooth', action='store_true',
+                            help='Disable smooth movement during drag')
+    drag_group.add_argument('--click-before-drag', action='store_true',
+                            help='Click before starting drag')
+    drag_group.add_argument('--click-after-drag', action='store_true',
+                            help='Click after completing drag')
 
     # Key options
     key_group = parser.add_argument_group('Key options')
@@ -1385,7 +1713,67 @@ def main():
     key_group.add_argument('--key-delay', type=float, default=0,
                            help='Delay after key press in seconds (default: 0)')
 
+    # Type options
+    type_group = parser.add_argument_group('Type options')
+    type_group.add_argument('--type', type=str,
+                            help='Type a sequence of text')
+    type_group.add_argument('--type-interval', type=float, default=0.05,
+                            help='Interval between keystrokes when typing (default: 0.05)')
+    type_group.add_argument('--type-delay', type=float, default=0,
+                            help='Delay after typing in seconds (default: 0)')
+
+    # Scroll options
+    scroll_group = parser.add_argument_group('Scroll options')
+    scroll_group.add_argument('--scroll', type=int,
+                              help='Amount to scroll (positive for up, negative for down)')
+    scroll_group.add_argument('--scroll-steps', type=int, default=10,
+                              help='Number of steps to divide the scroll into (default: 10)')
+    scroll_group.add_argument('--scroll-interval', type=float, default=0.01,
+                              help='Time between scroll steps in seconds (default: 0.01)')
+    scroll_group.add_argument('--scroll-delay', type=float, default=0,
+                              help='Delay after scrolling in seconds (default: 0)')
+
+    # Monitor options
+    monitor_group = parser.add_argument_group('Monitor options')
+    monitor_group.add_argument('--monitor', action='store_true',
+                               help='Monitor mouse position in real-time')
+    monitor_group.add_argument('--monitor-interval', type=float, default=0.1,
+                               help='Update interval for monitoring in seconds (default: 0.1)')
+    monitor_group.add_argument('--monitor-duration', type=float,
+                               help='Duration to monitor in seconds (default: indefinite)')
+    monitor_group.add_argument('--no-monitor-clicks', action='store_true',
+                               help='Disable click detection during monitoring')
+    monitor_group.add_argument('--list-monitors', action='store_true',
+                               help='List all detected monitors')
+
+    # Window selection options
+    window_group = parser.add_argument_group('Window selection options')
+    window_group.add_argument('--window-title', type=str,
+                              help='Select window by title (exact or partial match)')
+    window_group.add_argument('--window-process', type=str,
+                              help='Select window by process name')
+    window_group.add_argument('--window-wait', type=float, default=1.0,
+                              help='Wait time after window activation (default: 1.0)')
+    window_group.add_argument('--no-window-required', action='store_true',
+                              help='Continue even if window is not found')
+    window_group.add_argument('--window-retry', type=int, default=3,
+                              help='Number of times to retry finding window (default: 3)')
+
     args = parser.parse_args()
+
+    # Handle monitor listing
+    if args.list_monitors:
+        list_monitors()
+        return
+
+    # Handle monitor mode
+    if args.monitor:
+        monitor_mouse_position(
+            update_interval=args.monitor_interval,
+            show_clicks=not args.no_monitor_clicks,
+            duration=args.monitor_duration
+        )
+        return
 
     # Handle record mode
     if args.record is not None:
@@ -1397,29 +1785,99 @@ def main():
         replay_events(args.replay)
         return
 
-    # Handle key holding and pressing
-    held_key_obj = None
-    try:
-        if args.hold_key:
-            held_key_obj = hold_key(args.hold_key)
-            print(f"Holding {args.hold_key} key...")
+    # Handle sequence mode
+    if args.sequence is not None:
+        if args.sequence.endswith('.json') and os.path.isfile(args.sequence):
+            with open(args.sequence, 'r') as f:
+                actions = json.load(f)
+        elif args.sequence.startswith('[') and args.sequence.endswith(']'):
+            actions = json.loads(args.sequence)
+        else:
+            # Parse simple sequence syntax
+            actions = parse_simple_sequence(args.sequence)
+        perform_sequence(actions)
+        return
 
-        if args.key:
-            for key in args.key:
-                perform_key_press(
-                    key,
-                    modifiers=args.modifiers,
-                    count=args.key_count,
-                    interval=args.key_interval,
-                    delay_after=args.key_delay
-                )
-                print(f"Pressed key: {key}")
+    # Handle window selection
+    if args.window_title or args.window_process:
+        if not find_and_activate_window(
+            title=args.window_title,
+            process=args.window_process,
+            wait=args.window_wait,
+            required=not args.no_window_required,
+            retry_count=args.window_retry
+        ):
+            return
 
-    finally:
-        # Always release held key when done
-        if held_key_obj is not None and args.release_key:
-            release_key(held_key_obj)
-            print(f"Released {args.hold_key} key")
+    # Handle mouse movement
+    if args.move is not None:
+        x, y = args.move
+        move_mouse(
+            x, y,
+            delay=args.delay,
+            check_bounds=not args.ignore_bounds,
+            smooth=args.smooth or args.global_smooth,
+            smooth_duration=args.duration if not args.global_smooth else args.global_duration,
+            smooth_steps=args.steps if not args.global_smooth else args.global_steps,
+            monitor_index=args.monitor_index
+        )
+
+    # Handle clicks
+    if args.click or args.right_click or args.double_click:
+        button = 'right' if args.right_click else args.global_button
+        perform_click(
+            button=button,
+            count=2 if args.double_click else args.click_count,
+            interval=args.click_interval if not args.global_interval else args.global_interval,
+            double=args.double_click,
+            delay_after=args.click_delay
+        )
+
+    # Handle drag operations
+    if args.drag is not None or args.drag_from is not None:
+        if args.drag_from is not None:
+            x1, y1, x2, y2 = args.drag_from
+            move_mouse(x1, y1, smooth=not args.no_drag_smooth)
+            if args.click_before_drag:
+                perform_click(button=args.global_button)
+            move_mouse(x2, y2, smooth=not args.no_drag_smooth)
+            if args.click_after_drag:
+                perform_click(button=args.global_button)
+        else:
+            dx, dy = args.drag
+            if args.click_before_drag:
+                perform_click(button=args.global_button)
+            move_mouse(dx, dy, smooth=not args.no_drag_smooth)
+            if args.click_after_drag:
+                perform_click(button=args.global_button)
+
+    # Handle key operations
+    if args.key:
+        for key in args.key:
+            perform_key_press(
+                key,
+                modifiers=args.modifiers,
+                count=args.key_count,
+                interval=args.key_interval if not args.global_interval else args.global_interval,
+                delay_after=args.key_delay
+            )
+
+    # Handle text typing
+    if args.type:
+        perform_type(
+            args.type,
+            interval=args.type_interval,
+            delay_after=args.type_delay
+        )
+
+    # Handle scrolling
+    if args.scroll is not None:
+        perform_scroll(
+            args.scroll,
+            steps=args.scroll_steps,
+            interval=args.scroll_interval,
+            delay_after=args.scroll_delay
+        )
 
 
 if __name__ == "__main__":
