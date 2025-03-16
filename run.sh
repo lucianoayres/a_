@@ -13,4 +13,4 @@ fi
 python a_.py "$@"
 
 # Deactivate the virtual environment
-deactivate 
+deactivate
